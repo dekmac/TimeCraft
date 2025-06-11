@@ -14,6 +14,41 @@ from .helpers import (
 )
 
 
+def generate_tag_names_from_description(description: str, num_tags: int) -> list:
+    """Generate appropriate tag names based on description keywords."""
+    keywords_to_tags = {
+        'temperature': ['Temperature_Sensor_1', 'Temperature_Sensor_2', 'Ambient_Temperature'],
+        'pressure': ['Pressure_Gauge_1', 'Pressure_Gauge_2', 'System_Pressure'],
+        'vibration': ['Vibration_X', 'Vibration_Y', 'Vibration_Z'],
+        'factory': ['Production_Rate', 'Machine_Efficiency', 'Power_Consumption'],
+        'energy': ['Power_Output', 'Voltage', 'Current'],
+        'sensor': ['Sensor_A', 'Sensor_B', 'Sensor_C'],
+        'monitoring': ['CPU_Usage', 'Memory_Usage', 'Network_Traffic'],
+        'financial': ['Stock_Price', 'Trading_Volume', 'Market_Index'],
+        'weather': ['Temperature', 'Humidity', 'Wind_Speed'],
+        'traffic': ['Vehicle_Count', 'Speed_Average', 'Congestion_Level'],
+        'smart': ['Smart_Device_1', 'Smart_Device_2', 'Smart_Device_3'],
+        'building': ['HVAC_Temperature', 'Occupancy_Count', 'Light_Level'],
+        'iot': ['IoT_Device_1', 'IoT_Device_2', 'IoT_Device_3']
+    }
+    
+    tags = []
+    lower_desc = description.lower()
+    
+    # Find matching keywords and add their tags
+    for keyword, tag_list in keywords_to_tags.items():
+        if keyword in lower_desc:
+            tags.extend(tag_list)
+            if len(tags) >= num_tags:
+                break
+    
+    # Fill remaining slots with generic tags
+    while len(tags) < num_tags:
+        tags.append(f'Tag_{len(tags) + 1}')
+    
+    return tags[:num_tags]
+
+
 def handle_generate_timeseries_from_text(request: TextToTimeSeriesRequest, bridge_text2ts_available: bool) -> JSONResponse:
     """Generate time series data from text description using BRIDGE model."""
     try:
@@ -132,36 +167,42 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
     """Generate multiple time series data for different tags based on a text description."""
     try:
         if not bridge_text2ts_available:
+            # Generate tag names based on scenario
+            tags = generate_tag_names_from_description(request.text_description, request.num_tags)
+            
             # Generate mock data for each tag
             mock_results = {}
-            for tag in request.tags:
+            for i, tag in enumerate(tags):
                 mock_data = generate_mock_timeseries(
-                    request.length,
-                    f"{request.text} - {tag}",
-                    getattr(request, 'frequency', 'hourly')
+                    request.sequence_length,
+                    "sine" if i % 3 == 0 else "linear" if i % 3 == 1 else "default",
+                    50.0 + i * 20
                 )
-                mock_results[tag] = mock_data["timeseries"]
+                mock_results[tag] = mock_data
             
             return create_demo_response(
                 "demo_mode",
                 "BRIDGE Text2TS model not available. This is a demo response with mock aggregate time series data.",
-                text=request.text,
-                tags=request.tags,
-                length=request.length,
-                frequency=getattr(request, 'frequency', 'hourly'),
+                text_description=request.text_description,
+                tags=tags,
+                num_tags=request.num_tags,
+                sequence_length=request.sequence_length,
                 aggregate_timeseries=mock_results,
                 note="In production, this would generate actual multi-tag time series"
             )
+        
+        # Generate tag names based on scenario  
+        tags = generate_tag_names_from_description(request.text_description, request.num_tags)
         
         # Import BRIDGE modules
         from BRIDGE.inference.text_to_timeseries import generate_aggregate_timeseries
         
         # Generate aggregate time series
         result = generate_aggregate_timeseries(
-            text=request.text,
-            tags=request.tags,
-            length=request.length,
-            frequency=getattr(request, 'frequency', 'hourly'),
+            text=request.text_description,
+            tags=tags,
+            length=request.sequence_length,
+            frequency='hourly',
             domain=getattr(request, 'domain', None)
         )
         
@@ -172,10 +213,10 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
         
         return JSONResponse({
             "status": "success",
-            "text": request.text,
-            "tags": request.tags,
-            "length": request.length,
-            "frequency": getattr(request, 'frequency', 'hourly'),
+            "text_description": request.text_description,
+            "tags": tags,
+            "num_tags": request.num_tags,
+            "sequence_length": request.sequence_length,
             "aggregate_timeseries": result.get("aggregate_timeseries", {}),
             "metadata": result.get("metadata", {}),
             "details": result

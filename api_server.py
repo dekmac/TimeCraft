@@ -11,6 +11,7 @@ import uvicorn
 from typing import Dict
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import modules
 from api.startup import (
@@ -47,6 +48,15 @@ app = FastAPI(
     description="REST API for TimeCraft time series generation framework",
     version="1.0.0",
     docs_url="/swagger"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify actual origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
