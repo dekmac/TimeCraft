@@ -54,14 +54,18 @@ def handle_generate_timeseries_from_text(request: TextToTimeSeriesRequest, bridg
     try:
         if not bridge_text2ts_available:
             mock_data = generate_mock_timeseries(
-                request.length, 
-                request.text, 
-                getattr(request, 'frequency', 'hourly')
+                request.length,
+                "sine" if "temperature" in request.text.lower() else "linear" if "pressure" in request.text.lower() else "default",
+                50.0
             )
             return create_demo_response(
                 "demo_mode",
                 "BRIDGE Text2TS model not available. This is a demo response with mock time series data.",
-                **mock_data
+                text=request.text,
+                length=request.length,
+                frequency=getattr(request, 'frequency', 'hourly'),
+                timeseries=mock_data,
+                note="In production, this would generate actual time series from text using BRIDGE model"
             )
         
         # Import BRIDGE modules
@@ -167,42 +171,36 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
     """Generate multiple time series data for different tags based on a text description."""
     try:
         if not bridge_text2ts_available:
-            # Generate tag names based on scenario
-            tags = generate_tag_names_from_description(request.text_description, request.num_tags)
-            
             # Generate mock data for each tag
             mock_results = {}
-            for i, tag in enumerate(tags):
+            for tag in request.tags:
                 mock_data = generate_mock_timeseries(
-                    request.sequence_length,
-                    "sine" if i % 3 == 0 else "linear" if i % 3 == 1 else "default",
-                    50.0 + i * 20
+                    request.length,
+                    "sine" if "temperature" in tag.lower() else "linear" if "pressure" in tag.lower() else "default",
+                    50.0 + len(mock_results) * 20
                 )
                 mock_results[tag] = mock_data
             
             return create_demo_response(
                 "demo_mode",
                 "BRIDGE Text2TS model not available. This is a demo response with mock aggregate time series data.",
-                text_description=request.text_description,
-                tags=tags,
-                num_tags=request.num_tags,
-                sequence_length=request.sequence_length,
+                text=request.text,
+                tags=request.tags,
+                length=request.length,
+                frequency=getattr(request, 'frequency', 'hourly'),
                 aggregate_timeseries=mock_results,
                 note="In production, this would generate actual multi-tag time series"
             )
-        
-        # Generate tag names based on scenario  
-        tags = generate_tag_names_from_description(request.text_description, request.num_tags)
         
         # Import BRIDGE modules
         from BRIDGE.inference.text_to_timeseries import generate_aggregate_timeseries
         
         # Generate aggregate time series
         result = generate_aggregate_timeseries(
-            text=request.text_description,
-            tags=tags,
-            length=request.sequence_length,
-            frequency='hourly',
+            text=request.text,
+            tags=request.tags,
+            length=request.length,
+            frequency=getattr(request, 'frequency', 'hourly'),
             domain=getattr(request, 'domain', None)
         )
         
@@ -213,10 +211,10 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
         
         return JSONResponse({
             "status": "success",
-            "text_description": request.text_description,
-            "tags": tags,
-            "num_tags": request.num_tags,
-            "sequence_length": request.sequence_length,
+            "text": request.text,
+            "tags": request.tags,
+            "length": request.length,
+            "frequency": getattr(request, 'frequency', 'hourly'),
             "aggregate_timeseries": result.get("aggregate_timeseries", {}),
             "metadata": result.get("metadata", {}),
             "details": result
