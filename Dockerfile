@@ -29,7 +29,8 @@ RUN echo "fastapi" > requirements.txt && \
     echo "requests>=2.28.2" >> requirements.txt && \
     echo "pandas" >> requirements.txt && \
     echo "numpy" >> requirements.txt && \
-    echo "scikit-learn" >> requirements.txt
+    echo "scikit-learn" >> requirements.txt && \
+    echo "aiofiles" >> requirements.txt
 
 # Install Python dependencies for REST API and BRIDGE components
 RUN pip install --no-cache-dir --upgrade pip && \
