@@ -70,7 +70,7 @@ python self_refine_main.py \
 | Argument                      | Description                                                                |
 |-------------------------------|----------------------------------------------------------------------------|
 | `--openai_key`                | OpenAI API key.                                                            |
-| `--openai_model`              | OpenAI model name (default: `gpt-4o-2024-05-13`).                          |
+| `--openai_model`              | OpenAI model name (default: `gpt-4o`).                          |
 | `--llm_optimize`              | Use LLM to optimize text descriptions.                                     |
 | `--ts_file`                   | Path to the CSV file containing time series data.                          |
 | `--dataset_name`              | Name/ID of the dataset for description templates.                          |

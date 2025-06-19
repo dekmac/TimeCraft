@@ -65,7 +65,7 @@ def compute_trend(data):
     else:
         return "fluctuating"
 
-def optimize_text_with_llm(text, model='gpt-4o-2024-05-13', api_key=None):
+def optimize_text_with_llm(text, model='gpt-4o', api_key=None):
     """
     Optimize a text description using an LLM (e.g., GPT-4) to improve grammar, clarity, and narrative quality.
     """
@@ -164,7 +164,7 @@ def generate_text_description_for_time_series(file_path, prediction_length, data
             if llm_optimize:
                 optimized_text = optimize_text_with_llm(
                     text=text_description,
-                    model='gpt-4o-2024-05-13',
+                    model='gpt-4o',
                     api_key=llm_api_key
                 )
                 print(f"\nOriginal: {text_description}\nOptimized: {optimized_text}\n")

@@ -152,3 +152,44 @@ def get_component_status(components: Dict[str, bool]) -> Dict[str, Any]:
             "openai_api_type": os.environ.get('OPENAI_API_TYPE', 'openai')
         }
     }
+
+
+def generate_tag_names_from_description(description: str, num_tags: int) -> List[str]:
+    """Generate tag names based on text description using keyword mapping."""
+    # Simple tag generation based on common keywords
+    keywordMapping = {
+        'temperature': ['Temperature_Sensor_1', 'Temperature_Sensor_2', 'Ambient_Temperature'],
+        'pressure': ['Pressure_Gauge_1', 'Pressure_Gauge_2', 'System_Pressure'],
+        'vibration': ['Vibration_X', 'Vibration_Y', 'Vibration_Z'],
+        'factory': ['Production_Rate', 'Machine_Efficiency', 'Power_Consumption'],
+        'energy': ['Power_Output', 'Voltage', 'Current'],
+        'sensor': ['Sensor_A', 'Sensor_B', 'Sensor_C'],
+        'monitoring': ['CPU_Usage', 'Memory_Usage', 'Network_Traffic'],
+        'financial': ['Stock_Price', 'Trading_Volume', 'Market_Index'],
+        'weather': ['Temperature', 'Humidity', 'Wind_Speed'],
+        'traffic': ['Vehicle_Count', 'Speed_Average', 'Congestion_Level'],
+        'smart': ['Smart_Meter_1', 'Smart_Meter_2', 'Smart_Device'],
+        'building': ['HVAC_Temperature', 'Occupancy_Rate', 'Lighting_Level'],
+        'hvac': ['HVAC_Temperature', 'Humidity_Control', 'Air_Flow'],
+        'flow': ['Flow_Rate_1', 'Flow_Rate_2', 'Flow_Sensor'],
+        'machine': ['Machine_1_Status', 'Machine_2_Status', 'Machine_Efficiency'],
+        'production': ['Production_Rate', 'Quality_Score', 'Downtime'],
+        'iot': ['IoT_Sensor_1', 'IoT_Sensor_2', 'IoT_Gateway'],
+        'network': ['Network_Latency', 'Bandwidth_Usage', 'Packet_Loss']
+    }
+
+    tags = []
+    lower_description = description.lower()
+    
+    # Find matching keywords and generate appropriate tags
+    for keyword, tag_list in keywordMapping.items():
+        if keyword in lower_description:
+            tags.extend(tag_list)
+            if len(tags) >= num_tags:
+                break
+
+    # Fill remaining slots with generic tags
+    while len(tags) < num_tags:
+        tags.append(f'Tag_{len(tags) + 1}')
+
+    return tags[:num_tags]

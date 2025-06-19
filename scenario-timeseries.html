@@ -49,7 +49,7 @@
                         <button 
                             id="generateBtn" 
                             class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                            onclick="generateTimeSeries()"
+                            onclick="generateTimeSeriesMain()"
                         >
                             Generate Time Series
                         </button>
@@ -63,6 +63,18 @@
                         </button>
                     </div>
                 </div>
+            </div>
+            
+            <!-- Progress Bar -->
+            <div id="progressSection" class="mb-6 hidden">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-lg font-semibold text-gray-800">Generation Progress</h3>
+                    <span id="progressText" class="text-sm text-gray-600">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-4">
+                    <div id="progressBar" class="bg-blue-600 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div id="progressStatus" class="text-sm text-gray-600 mt-2">Preparing...</div>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -94,6 +106,22 @@
                         <option value="daily">Daily</option>
                         <option value="weekly">Weekly</option>
                     </select>
+                </div>
+            </div>
+            
+            <!-- Progressive Mode Toggle -->
+            <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-medium text-blue-800">Progressive Generation</h3>
+                        <p class="text-xs text-blue-600 mt-1">Enable progressive generation with real-time progress bar and chart updates</p>
+                    </div>
+                    <div class="flex items-center">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="progressiveMode" checked class="mr-3 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                            <span class="text-sm text-blue-700 font-medium">Enable Progressive Mode</span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -283,6 +311,315 @@
             };
         }
 
+        // Main generation function that chooses between progressive and traditional modes
+        function generateTimeSeriesMain() {
+            const progressiveMode = document.getElementById('progressiveMode').checked;
+            
+            if (progressiveMode) {
+                generateTimeSeriesProgressive();
+            } else {
+                generateTimeSeries();
+            }
+        }
+
+        // Progressive generation functions
+        function updateProgress(percentage, status) {
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressStatus = document.getElementById('progressStatus');
+            
+            progressBar.style.width = percentage + '%';
+            progressText.textContent = Math.round(percentage) + '%';
+            progressStatus.textContent = status;
+        }
+
+        function showProgressSection() {
+            document.getElementById('progressSection').classList.remove('hidden');
+        }
+
+        function hideProgressSection() {
+            document.getElementById('progressSection').classList.add('hidden');
+        }
+
+        async function generateTimeSeriesProgressive() {
+            const generateBtn = document.getElementById('generateBtn');
+            
+            const scenario = document.getElementById('scenarioText').value || 'Generic monitoring scenario';
+            const numTagsInput = document.getElementById('numTags').value;
+            const numTags = parseInt(numTagsInput);
+            
+            // Validate number of tags
+            if (isNaN(numTags) || numTags < 0 || numTags > 100) {
+                alert('Please enter a valid number of tags between 0 and 100.');
+                return;
+            }
+            
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+            showProgressSection();
+            
+            const length = parseInt(document.getElementById('dataLength').value);
+            const frequency = document.getElementById('frequency').value;
+
+            try {
+                // Step 1: Generate tags (10% progress)
+                updateProgress(5, 'Generating tag names...');
+                
+                const tagRequest = {
+                    text_description: scenario,
+                    num_tags: numTags,
+                    sequence_length: length
+                };
+
+                const tagResponse = await fetch('/generate-tags', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(tagRequest)
+                });
+
+                if (!tagResponse.ok) {
+                    throw new Error(`Failed to generate tags: ${tagResponse.status}`);
+                }
+
+                const tagData = await tagResponse.json();
+                updateProgress(10, `Generated ${tagData.tags.length} tag names`);
+                
+                // Initialize current data structure
+                currentData = {
+                    scenario: scenario,
+                    tagNames: tagData.tags,
+                    length: length,
+                    frequency: frequency,
+                    timeSeries: {},
+                    timestamp: new Date().toISOString(),
+                    apiStatus: tagData.status,
+                    apiMessage: tagData.message
+                };
+
+                // Show initial results with empty chart
+                displayInitialResults();
+
+                // Step 2: Generate timeseries for each tag progressively
+                const progressPerTag = 80 / tagData.tags.length; // 80% total for all tags
+                
+                for (let i = 0; i < tagData.tags.length; i++) {
+                    const tag = tagData.tags[i];
+                    const currentProgress = 10 + (i * progressPerTag);
+                    
+                    updateProgress(currentProgress, `Generating data for ${tag}...`);
+                    
+                    const tsRequest = {
+                        tag_name: tag,
+                        text_description: scenario,
+                        sequence_length: length,
+                        tag_index: i
+                    };
+
+                    const tsResponse = await fetch('/generate-timeseries-for-tag', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(tsRequest)
+                    });
+
+                    if (!tsResponse.ok) {
+                        console.warn(`Failed to generate timeseries for ${tag}: ${tsResponse.status}`);
+                        // Generate mock data as fallback
+                        currentData.timeSeries[tag] = generateMockTimeseriesForTag(length, i);
+                    } else {
+                        const tsData = await tsResponse.json();
+                        currentData.timeSeries[tag] = tsData.timeseries;
+                    }
+                    
+                    // Update chart with new data
+                    updateChartWithNewTag(tag, currentData.timeSeries[tag]);
+                    updateProgress(10 + ((i + 1) * progressPerTag), `Generated data for ${tag}`);
+                    
+                    // Small delay to show progress visually
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+
+                // Step 3: Finalize (remaining 10%)
+                updateProgress(95, 'Finalizing results...');
+                displayFinalResults();
+                updateProgress(100, 'Generation complete!');
+                
+                // Hide progress after a short delay
+                setTimeout(() => {
+                    hideProgressSection();
+                }, 2000);
+                
+                document.getElementById('exportBtn').disabled = false;
+
+            } catch (error) {
+                console.error('Error during progressive generation:', error);
+                updateProgress(0, 'Generation failed');
+                alert('Error generating timeseries: ' + error.message);
+                hideProgressSection();
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Generate Time Series';
+            }
+        }
+
+        function generateMockTimeseriesForTag(length, tagIndex) {
+            // Generate different patterns based on tag index
+            const patterns = ['sine', 'linear', 'seasonal', 'randomwalk'];
+            const pattern = patterns[tagIndex % patterns.length];
+            
+            switch (pattern) {
+                case 'sine':
+                    return generateSinePattern(length, 50 + tagIndex * 20, 15, 0.1 + tagIndex * 0.05, tagIndex, 5);
+                case 'linear':
+                    return generateLinearPattern(length, 30 + tagIndex * 15, 0.1 + tagIndex * 0.05, 3);
+                case 'seasonal':
+                    return generateSeasonalPattern(length, 40 + tagIndex * 10, 20, 24, 4);
+                case 'randomwalk':
+                    return generateRandomWalkPattern(length, 60 + tagIndex * 10, 2);
+                default:
+                    const base = generateSinePattern(length, 45 + tagIndex * 12, 10, 0.08, tagIndex, 2);
+                    const trend = generateLinearPattern(length, 0, 0.05, 1);
+                    return base.map((val, i) => Math.round((val + trend[i]) * 100) / 100);
+            }
+        }
+
+        function displayInitialResults() {
+            // Show results section
+            document.getElementById('resultsSection').classList.remove('hidden');
+
+            // Update generation info
+            const tagCount = currentData.tagNames ? currentData.tagNames.length : 0;
+            const length = currentData.length || 0;
+            const frequency = currentData.frequency || 'unknown';
+            
+            let infoText = `${tagCount} tags, ${length} points (${frequency}) - In progress...`;
+            document.getElementById('generationInfo').textContent = infoText;
+
+            // Create empty chart
+            createEmptyChart();
+
+            // Clear statistics and preview
+            document.getElementById('statisticsSection').innerHTML = '<div class="text-gray-500">Generating data...</div>';
+            document.getElementById('dataPreview').textContent = 'Data preview will be available after generation completes...';
+
+            // Scroll to results
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function createEmptyChart() {
+            const ctx = document.getElementById('timeSeriesChart').getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (chart) {
+                chart.destroy();
+            }
+
+            const labels = Array.from({ length: currentData.length }, (_, i) => {
+                if (currentData.frequency === 'hourly') {
+                    return `H${i + 1}`;
+                } else if (currentData.frequency === 'daily') {
+                    return `D${i + 1}`;
+                } else {
+                    return `W${i + 1}`;
+                }
+            });
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Generated Time Series Data (In Progress)'
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: `Time (${currentData.frequency})`
+                            }
+                        },
+                        y: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        function updateChartWithNewTag(tagName, data) {
+            if (!chart) return;
+
+            const colors = [
+                '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6',
+                '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
+            ];
+
+            const colorIndex = chart.data.datasets.length % colors.length;
+            
+            const newDataset = {
+                label: tagName,
+                data: data,
+                borderColor: colors[colorIndex],
+                backgroundColor: colors[colorIndex] + '20',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1
+            };
+
+            chart.data.datasets.push(newDataset);
+            chart.update();
+        }
+
+        function displayFinalResults() {
+            // Update generation info to show completion
+            const tagCount = currentData.tagNames ? currentData.tagNames.length : 0;
+            const length = currentData.length || 0;
+            const frequency = currentData.frequency || 'unknown';
+            
+            let infoText = `${tagCount} tags, ${length} points (${frequency}) - Complete`;
+            if (currentData.apiStatus && currentData.apiStatus === 'demo_mode') {
+                infoText += ' - Demo Mode';
+            }
+            document.getElementById('generationInfo').textContent = infoText;
+
+            // Update chart title
+            if (chart) {
+                chart.options.plugins.title.text = 'Generated Time Series Data';
+                chart.update();
+            }
+
+            // Display statistics
+            displayStatistics();
+
+            // Display data preview
+            displayDataPreview();
+        }
+
+        // Keep original function for backward compatibility
         function generateTimeSeries() {
             const generateBtn = document.getElementById('generateBtn');
             
@@ -310,7 +647,7 @@
             };
 
             // Call the API endpoint
-            fetch('http://localhost:8080/generate-aggregate-timeseries', {
+            fetch('/generate-aggregate-timeseries', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -325,14 +662,15 @@
             })
             .then(data => {
                 // Transform API response to match our existing data structure
+                // Handle cases where response might not have all expected fields
                 currentData = {
-                    scenario: data.text_description,
-                    tagNames: data.tags,
-                    length: data.sequence_length,
+                    scenario: data.text_description || 'Unknown scenario',
+                    tagNames: data.tags || [],
+                    length: data.sequence_length || 0,
                     frequency: frequency,
-                    timeSeries: data.aggregate_timeseries,
+                    timeSeries: data.generated_timeseries || {}, // Fixed key name
                     timestamp: new Date().toISOString(),
-                    apiStatus: data.status,
+                    apiStatus: data.status || 'unknown',
                     apiMessage: data.message || null
                 };
                 
@@ -355,8 +693,12 @@
             // Show results section
             document.getElementById('resultsSection').classList.remove('hidden');
 
-            // Update generation info
-            let infoText = `${currentData.tagNames.length} tags, ${currentData.length} points (${currentData.frequency})`;
+            // Update generation info - handle cases where tagNames might be undefined
+            const tagCount = currentData.tagNames ? currentData.tagNames.length : 0;
+            const length = currentData.length || 0;
+            const frequency = currentData.frequency || 'unknown';
+            
+            let infoText = `${tagCount} tags, ${length} points (${frequency})`;
             if (currentData.apiStatus && currentData.apiStatus === 'demo_mode') {
                 infoText += ' - Demo Mode';
             }
@@ -479,12 +821,19 @@
 
         function displayDataPreview() {
             const preview = document.getElementById('dataPreview');
+            
+            // Handle case where tagNames might be undefined
+            if (!currentData.tagNames || !currentData.timeSeries) {
+                preview.textContent = 'No data available for preview';
+                return;
+            }
+            
             let previewText = 'Time\t' + currentData.tagNames.join('\t') + '\n';
             
             const maxPreviewRows = 10;
             for (let i = 0; i < Math.min(maxPreviewRows, currentData.length); i++) {
                 const row = [i + 1].concat(
-                    currentData.tagNames.map(tag => currentData.timeSeries[tag][i])
+                    currentData.tagNames.map(tag => currentData.timeSeries[tag] ? currentData.timeSeries[tag][i] : 'N/A')
                 );
                 previewText += row.join('\t') + '\n';
             }
@@ -498,28 +847,64 @@
         }
 
         function exportToCSV() {
-            if (!currentData) return;
+            if (!currentData || !currentData.tagNames || !currentData.timeSeries) {
+                alert('No data available for export');
+                return;
+            }
 
-            let csvContent = 'Time,' + currentData.tagNames.join(',') + '\n';
+            // Create CSV content with timestamps
+            let csvContent = 'Timestamp,' + currentData.tagNames.join(',') + '\n';
+            
+            // Generate timestamps based on frequency
+            const frequency = currentData.frequency || 'hourly';
+            let timeUnit = 'H';
+            if (frequency === 'daily') timeUnit = 'D';
+            if (frequency === 'weekly') timeUnit = 'W';
             
             for (let i = 0; i < currentData.length; i++) {
-                const row = [i + 1].concat(
-                    currentData.tagNames.map(tag => currentData.timeSeries[tag][i])
+                const timestamp = `${timeUnit}${i + 1}`;
+                const row = [timestamp].concat(
+                    currentData.tagNames.map(tag => 
+                        currentData.timeSeries[tag] && currentData.timeSeries[tag][i] !== undefined 
+                            ? currentData.timeSeries[tag][i] 
+                            : 'N/A'
+                    )
                 );
                 csvContent += row.join(',') + '\n';
             }
 
+            // Create and download file
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             
             if (link.download !== undefined) {
                 const url = URL.createObjectURL(blob);
                 link.setAttribute('href', url);
-                link.setAttribute('download', `timeseries_${Date.now()}.csv`);
+                
+                // Create filename with timestamp and scenario info
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const scenarioName = currentData.scenario ? 
+                    currentData.scenario.substring(0, 30).replace(/[^a-zA-Z0-9]/g, '_') : 
+                    'timeseries';
+                link.setAttribute('download', `${scenarioName}_${timestamp}.csv`);
+                
                 link.style.visibility = 'hidden';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                
+                // Show success message
+                const exportBtn = document.getElementById('exportBtn');
+                const originalText = exportBtn.textContent;
+                exportBtn.textContent = 'Downloaded!';
+                exportBtn.classList.add('bg-green-600');
+                exportBtn.classList.remove('bg-green-600');
+                
+                setTimeout(() => {
+                    exportBtn.textContent = originalText;
+                    exportBtn.classList.remove('bg-green-700');
+                    exportBtn.classList.add('bg-green-600');
+                }, 2000);
             }
         }
 

@@ -29,7 +29,7 @@ class LSTPromptPredictor:
         Initialize the LSTPrompt predictor.
 
         Args:
-            model_name (str): Name of the OpenAI model (e.g., 'gpt-4o-2024-05-13').
+            model_name (str): Name of the OpenAI model (e.g., 'gpt-4o').
             dataset_name (str): Dataset to use (must exist in get_datasets()).
             method (str): Prediction method: 'LLMTime' or 'PromptCast'.
             num_samples (int): Number of samples per prediction.

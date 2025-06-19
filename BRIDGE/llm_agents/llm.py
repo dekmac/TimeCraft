@@ -9,7 +9,7 @@ from typing import List, Optional
 # os.environ['OPENAI_API_KEY'] = "xxx"
 
 class ChatLLM(BaseModel):
-    model: str = 'gpt-4o-2024-05-13'
+    model: str = 'gpt-4o'
     temperature: float = 0.0
     api_key: Optional[str] = None
     api_base: Optional[str] = None

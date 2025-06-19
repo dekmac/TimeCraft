@@ -10,6 +10,11 @@ This directory contains the Docker configuration for running TimeCraft as a REST
    ```bash
    docker build -t timecraft-api .
    ```
+   
+   **Important:** If you've made changes to the UI or any code files, you need to rebuild the Docker image to include those changes. Use the included build script for a clean rebuild:
+   ```bash
+   ./build-docker.sh
+   ```
 
 2. **Run the container:**
    ```bash

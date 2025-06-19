@@ -98,7 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--openai_key', type=str, default=None, help='OpenAI API key')
 
     # LLM settings
-    parser.add_argument('--openai_model', type=str, default='gpt-4o-2024-05-13', help='OpenAI model name')
+    parser.add_argument('--openai_model', type=str, default='gpt-4o', help='OpenAI model name')
     parser.add_argument('--llm_optimize', action='store_true', help='Use LLM to optimize text descriptions')
 
     # Time series files and descriptions
