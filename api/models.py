@@ -25,7 +25,10 @@ class TextRefinementRequest(BaseModel):
 
 class TextToTimeSeriesRequest(BaseModel):
     """Request model for text-to-time-series generation using BRIDGE model."""
-    text_description: str
+    text: str
+    length: Optional[int] = 168
+    frequency: Optional[str] = 'hourly'
+    domain: Optional[str] = None
     model_name: Optional[str] = "gpt-4o-2024-05-13"
     temperature: Optional[float] = 0.0
     openai_api_base: Optional[str] = None
@@ -53,9 +56,11 @@ class TargetAwareGenerationRequest(BaseModel):
 
 class AggregateTimeSeriesRequest(BaseModel):
     """Request model for aggregate multi-tag time series generation."""
-    text_description: str
-    num_tags: Optional[int] = 5
-    sequence_length: Optional[int] = 168
+    text: str
+    tags: List[str]
+    length: Optional[int] = 168
+    frequency: Optional[str] = 'hourly'
+    domain: Optional[str] = None
     model_name: Optional[str] = "gpt-4o-2024-05-13"
     temperature: Optional[float] = 0.0
     openai_api_base: Optional[str] = None

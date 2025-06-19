@@ -656,6 +656,8 @@ async def generate_timeseries_target_aware(request: TargetAwareGenerationRequest
 @app.post("/generate-aggregate-timeseries")
 async def generate_aggregate_timeseries(request: AggregateTimeSeriesRequest):
     """
+    DEPRECATED: This endpoint has been refactored in api_server.py to properly use BRIDGE models.
+    
     Generate multiple time series data for different tags based on a text description.
     
     This endpoint takes a text description, generates relevant tag names for that context,
