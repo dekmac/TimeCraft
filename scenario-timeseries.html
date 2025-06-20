@@ -37,13 +37,21 @@
                     Scenario Description
                 </label>
                 <div class="flex gap-4">
-                    <div class="flex-grow">
+                    <div class="flex-grow flex items-start gap-2">
                         <textarea 
                             id="scenarioText" 
                             rows="4" 
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="Example: A smart factory monitoring system tracking temperature, pressure, and vibration sensors across different production lines during a 24-hour manufacturing cycle..."
                         ></textarea>
+                        <button 
+                            id="refinePromptBtn"
+                            type="button"
+                            class="h-10 w-10 flex items-center justify-center bg-yellow-100 hover:bg-yellow-200 border border-yellow-300 rounded-md text-2xl transition duration-150 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                            title="Refine AI Prompt"
+                        >
+                            ✨
+                        </button>
                     </div>
                     <div class="flex flex-col gap-2">
                         <button 
@@ -1234,6 +1242,23 @@
             document.getElementById('scenarioText').value = 
                 'A smart factory monitoring system tracking temperature, pressure, and vibration sensors across different production lines during a 24-hour manufacturing cycle with automated quality control systems.';
         });
+
+        document.getElementById('refinePromptBtn').onclick = async function() {
+            const textarea = document.getElementById('scenarioText');
+            const dataLength = document.getElementById('dataLength').value;
+            const scenario = textarea.value;
+            const response = await fetch('/refine-prompt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scenario, sequence_length: parseInt(dataLength) })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                textarea.value = data.refined_prompt;
+            } else {
+                alert('Failed to refine prompt.');
+            }
+        };
     </script>
 </body>
 </html>

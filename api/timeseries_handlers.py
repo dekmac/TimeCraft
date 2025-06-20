@@ -3,6 +3,7 @@ Time series generation endpoints for TimeCraft API.
 """
 
 import os
+import re
 import traceback
 from typing import List, Optional
 from fastapi.responses import JSONResponse
@@ -147,23 +148,36 @@ def generate_tag_names_with_llm(description: str, num_tags: int, chat_llm) -> Li
         return generate_tag_names_from_description(description, num_tags)
 
 
-def create_timeseries_generation_prompt(tag_name: str, description: str, 
-                                      sequence_length: int) -> str:
-    """Create a prompt for LLM-based timeseries generation."""
-    return f"""Generate realistic time series data for the following sensor/metric:
-
-Tag Name: {tag_name}
-System Description: {description}
-Number of data points needed: {sequence_length}
-
-Requirements:
-1. Generate exactly {sequence_length} numerical values
-2. Make the values realistic for this type of sensor/metric
-3. Include natural variations and trends that would be expected
-4. Use appropriate value ranges for the sensor type
-5. Separate values with commas
-
-Return only the numerical values separated by commas, no additional text."""
+def create_timeseries_generation_prompt(
+    tag_name: str,
+    description: str,
+    sequence_length: int,
+    scenario: str = None,
+    time_period: str = None
+) -> str:
+    """
+    Create a prompt for LLM-based timeseries generation, considering scenario and time period.
+    """
+    scenario_text = f"\nScenario: {scenario}" if scenario else ""
+    time_period_text = f"\nTime Period: {time_period}" if time_period else ""
+    return (
+        f"Generate realistic time series data for the following sensor/metric:\n"
+        f"\nTag Name: {tag_name}"
+        f"\nSystem Description: {description}"
+        f"{scenario_text}"
+        f"{time_period_text}"
+        f"\nNumber of data points needed: {sequence_length}\n"
+        f"\nRequirements:"
+        f"\n1. Generate exactly {sequence_length} numerical values"
+        f"\n2. Make the values realistic for this type of sensor/metric"
+        f"\n3. Include natural variations and trends that would be expected"
+        f"\n4. Use appropriate value ranges for the sensor type"
+        f"\n5. If the scenario defines specific times or events, ensure these are reflected in the timeseries "
+        f"(e.g., visible changes at those times/events)"
+        f"\n6. The timeseries should cover the specified time period, with data points distributed accordingly"
+        f"\n7. Separate values with commas\n"
+        f"\nReturn only the numerical values separated by commas, no additional text."
+    )
 
 
 def parse_timeseries_response(response: str, tag_name: str, sequence_length: int, 
@@ -272,7 +286,6 @@ def generate_tag_names_from_description(description: str, num_tags: int) -> list
         tags.append(f'Tag_{len(tags) + 1}')
     
     return tags[:num_tags]
-
 
 def handle_generate_timeseries_from_text(request: TextToTimeSeriesRequest, bridge_text2ts_available: bool) -> JSONResponse:
     """Generate time series data from text description using BRIDGE model."""
@@ -562,7 +575,7 @@ def handle_generate_single_timeseries(request: SingleTimeSeriesRequest, bridge_t
             print(f"Generating timeseries for {request.tag_name} with mock data")
             # Fallback to mock data generation
             patterns = ["default", "sine", "linear"]
-            pattern = patterns[tag_index % len(patterns)]
+            pattern = patterns[tag_index % len(pattern)]
             base_value = 50.0 + (tag_index * 20.0)
             
             timeseries_data = generate_mock_timeseries(
@@ -702,7 +715,7 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
             # Fallback to mock data generation
             for i, tag in enumerate(generated_tags):
                 patterns = ["default", "sine", "linear"]
-                pattern = patterns[i % len(patterns)]
+                pattern = patterns[i % len(pattern)]
                 base_value = 50.0 + (i * 20.0)
                 
                 timeseries_data = generate_mock_timeseries(
@@ -746,3 +759,21 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
     except Exception as e:
         print(f"Error in aggregate_timeseries_generation: {traceback.format_exc()}")
         return handle_api_error("aggregate_timeseries_generation", e)
+
+
+def refine_scenario_prompt(scenario: str, sequence_length: int = 168) -> str:
+    """
+    Generate a structured, explicit prompt for timeseries generation from a scenario description.
+    """
+    prompt = (
+        f"Generate realistic hourly time series data reflecting the scenario and events described.\n"
+        f"Number of data points: {sequence_length} (one per hour for a week, H1 = Monday 00:00, H{sequence_length} = Sunday 23:00).\n\n"
+        f"Scenario: {scenario}\n\n"
+        "Requirements:\n"
+        "1. For each day, increase values for footfall and ride occupancy from H11 to H18, with local peaks at H13 and H17.\n"
+        "2. For each day, after H18 (H19–H24), increase values for Crowd_Sensor_LakeArea to reflect the fireworks surge.\n"
+        "3. For Ride_Occupancy_RollerCoaster, set values to zero for H85–H87 (mid-week breakdown).\n"
+        "4. All other values should be realistic and reflect natural variations.\n"
+        "5. Return only the numerical values for each tag, separated by commas, no additional text."
+    )
+    return prompt

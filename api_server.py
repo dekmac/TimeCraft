@@ -38,10 +38,11 @@ from api.file_handlers import (
 from api.text_handlers import (
     handle_refine_text
 )
+from api.refine_prompt_models import RefinePromptRequest, RefinePromptResponse
 from api.timeseries_handlers import (
     handle_generate_timeseries_from_text, handle_domain_prompt_generation,
     handle_target_aware_generation, handle_aggregate_timeseries_generation,
-    handle_generate_tags, handle_generate_single_timeseries
+    handle_generate_tags, handle_generate_single_timeseries, refine_scenario_prompt
 )
 
 # Initialize components
@@ -118,6 +119,13 @@ async def generate_description(
 async def refine_text(request: TextRefinementRequest):
     """Refine textual descriptions using multi-agent approach."""
     return handle_refine_text(request, COMPONENTS['TIMECRAFT_AVAILABLE'])
+
+
+@app.post("/refine-prompt", response_model=RefinePromptResponse)
+async def refine_prompt(request: RefinePromptRequest):
+    """Refine a scenario description into a structured, explicit prompt for timeseries generation."""
+    refined = refine_scenario_prompt(request.scenario, request.sequence_length)
+    return RefinePromptResponse(refined_prompt=refined)
 
 
 @app.get("/models")
