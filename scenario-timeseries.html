@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TimeCraft - Scenario Time Series Generator</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -194,6 +195,21 @@
                     <pre id="dataPreview" class="text-sm text-gray-700"></pre>
                 </div>
             </div>
+        </div>
+
+        <!-- Prompt History Button -->
+        <div class="flex justify-end mb-2">
+          <button id="promptHistoryBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm font-medium">Prompt History</button>
+        </div>
+        <!-- Prompt History Modal -->
+        <div id="promptHistoryModal" class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 hidden">
+          <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold text-gray-800">Prompt History</h3>
+              <button id="closePromptHistory" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <ul id="promptHistoryList" class="max-h-80 overflow-y-auto space-y-2"></ul>
+          </div>
         </div>
     </div>
 
@@ -1283,40 +1299,57 @@
             resultsSection.insertBefore(stockResultsDiv, resultsSection.firstChild);
         }
 
-        // Initialize with example scenario
-        window.addEventListener('load', function() {
-            document.getElementById('scenarioText').value = 
-                'A smart factory monitoring system tracking temperature, pressure, and vibration sensors across different production lines during a 24-hour manufacturing cycle with automated quality control systems.';
-        });
+        // Prompt history functions
+        function savePromptToHistory(prompt) {
+            if (!prompt || !prompt.trim()) return;
+            let history = JSON.parse(localStorage.getItem('promptHistory') || '[]');
+            // Avoid duplicates in a row
+            if (history.length === 0 || history[0].prompt !== prompt) {
+                history.unshift({ prompt, ts: Date.now() });
+                // Limit to last 20 prompts
+                if (history.length > 20) history = history.slice(0, 20);
+                localStorage.setItem('promptHistory', JSON.stringify(history));
+            }
+        }
 
-        document.getElementById('refinePromptBtn').onclick = async function() {
-            const textarea = document.getElementById('scenarioText');
-            const dataLength = document.getElementById('dataLength').value;
-            const scenario = textarea.value;
-            const response = await fetch('/refine-prompt', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scenario, sequence_length: parseInt(dataLength) })
-            });
-            if (response.ok) {
-                const data = await response.json();
-                textarea.value = data.refined_prompt;
-                showPromptImprovedMessage();
+        function showPromptHistory() {
+            const modal = document.getElementById('promptHistoryModal');
+            const list = document.getElementById('promptHistoryList');
+            list.innerHTML = '';
+            let history = JSON.parse(localStorage.getItem('promptHistory') || '[]');
+            if (history.length === 0) {
+                list.innerHTML = '<li class="text-gray-500">No prompt history yet.</li>';
             } else {
-                alert('Failed to refine prompt.');
+                history.forEach((item, idx) => {
+                    const li = document.createElement('li');
+                    li.className = 'border rounded px-3 py-2 bg-gray-50 hover:bg-blue-50 cursor-pointer';
+                    li.textContent = item.prompt.length > 120 ? item.prompt.slice(0, 120) + '…' : item.prompt;
+                    li.title = new Date(item.ts).toLocaleString();
+                    li.onclick = () => {
+                        document.getElementById('scenarioText').value = item.prompt;
+                        modal.classList.add('hidden');
+                    };
+                    list.appendChild(li);
+                });
             }
+            modal.classList.remove('hidden');
+        }
+
+        document.getElementById('promptHistoryBtn').onclick = showPromptHistory;
+        document.getElementById('closePromptHistory').onclick = function() {
+            document.getElementById('promptHistoryModal').classList.add('hidden');
         };
-        function showPromptImprovedMessage() {
-            let msg = document.getElementById('promptImprovedMsg');
-            if (!msg) {
-                msg = document.createElement('div');
-                msg.id = 'promptImprovedMsg';
-                msg.className = 'fixed top-6 right-6 bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-2 rounded shadow-lg z-50';
-                msg.textContent = '✨ AI improved your prompt!';
-                document.body.appendChild(msg);
-            }
-            msg.style.display = 'block';
-            setTimeout(() => { msg.style.display = 'none'; }, 2000);
+        // Save prompt on generate/refine
+        const scenarioText = document.getElementById('scenarioText');
+        document.getElementById('generateBtn').addEventListener('click', function() {
+            savePromptToHistory(scenarioText.value);
+        });
+        const refineBtn2 = document.getElementById('refinePromptBtn');
+        if (refineBtn2) {
+            refineBtn2.addEventListener('click', function() {
+                // Save after the prompt is improved (delay to allow textarea update)
+                setTimeout(() => savePromptToHistory(scenarioText.value), 500);
+            });
         }
     </script>
 </body>
