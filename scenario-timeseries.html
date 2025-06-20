@@ -173,9 +173,13 @@
                 </div>
             </div>
             
+            <!-- Tag Chips Row -->
+            <div id="tagChipsRow" class="flex flex-wrap gap-2 mb-4"></div>
+
             <!-- Chart -->
             <div class="chart-container mb-6">
                 <canvas id="timeSeriesChart"></canvas>
+                <button id="downloadChartBtn" class="absolute top-2 right-2 bg-white border border-gray-300 rounded px-2 py-1 text-xs shadow hover:bg-gray-100" style="z-index:10;">Download Chart Image</button>
             </div>
 
             <!-- Statistics -->
@@ -593,13 +597,55 @@
                 data: data,
                 borderColor: colors[colorIndex],
                 backgroundColor: colors[colorIndex] + '20',
-                borderWidth: 2,
+                borderWidth: 5, // highlight new
                 fill: false,
                 tension: 0.1
             };
 
             chart.data.datasets.push(newDataset);
             chart.update();
+            updateTagChips(tagName);
+            setTimeout(() => {
+                // Remove highlight after 1s
+                if (chart.data.datasets.length > 0) {
+                    chart.data.datasets.forEach(ds => ds.borderWidth = 2);
+                    chart.update();
+                }
+            }, 1000);
+        }
+
+        // Download chart as image
+        if (document.getElementById('downloadChartBtn')) {
+            document.getElementById('downloadChartBtn').onclick = function() {
+                const link = document.createElement('a');
+                link.download = 'timeseries_chart.png';
+                link.href = chart.toBase64Image();
+                link.click();
+            };
+        }
+
+        function updateTagChips(selectedTag = null) {
+            const tagChipsRow = document.getElementById('tagChipsRow');
+            tagChipsRow.innerHTML = '';
+            if (!currentData || !currentData.tagNames) return;
+            currentData.tagNames.forEach(tag => {
+                const chip = document.createElement('button');
+                chip.textContent = tag;
+                chip.className = 'px-3 py-1 rounded-full border text-sm font-medium transition ' +
+                    (selectedTag === tag ? 'bg-blue-600 text-white border-blue-700' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-blue-100');
+                chip.onclick = () => highlightTagOnChart(tag);
+                tagChipsRow.appendChild(chip);
+            });
+        }
+
+        function highlightTagOnChart(tag) {
+            if (!chart) return;
+            chart.data.datasets.forEach((ds, i) => {
+                ds.borderWidth = (ds.label === tag) ? 5 : 2;
+                ds.hidden = (tag && ds.label !== tag);
+            });
+            chart.update();
+            updateTagChips(tag);
         }
 
         function displayFinalResults() {
@@ -1255,10 +1301,23 @@
             if (response.ok) {
                 const data = await response.json();
                 textarea.value = data.refined_prompt;
+                showPromptImprovedMessage();
             } else {
                 alert('Failed to refine prompt.');
             }
         };
+        function showPromptImprovedMessage() {
+            let msg = document.getElementById('promptImprovedMsg');
+            if (!msg) {
+                msg = document.createElement('div');
+                msg.id = 'promptImprovedMsg';
+                msg.className = 'fixed top-6 right-6 bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-2 rounded shadow-lg z-50';
+                msg.textContent = '✨ AI improved your prompt!';
+                document.body.appendChild(msg);
+            }
+            msg.style.display = 'block';
+            setTimeout(() => { msg.style.display = 'none'; }, 2000);
+        }
     </script>
 </body>
 </html>

@@ -763,17 +763,47 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
 
 def refine_scenario_prompt(scenario: str, sequence_length: int = 168) -> str:
     """
-    Generate a structured, explicit prompt for timeseries generation from a scenario description.
+    Use Azure OpenAI to rewrite a user's scenario prompt into an explicit, LLM-friendly prompt for timeseries generation.
     """
-    prompt = (
-        f"Generate realistic hourly time series data reflecting the scenario and events described.\n"
-        f"Number of data points: {sequence_length} (one per hour for a week, H1 = Monday 00:00, H{sequence_length} = Sunday 23:00).\n\n"
-        f"Scenario: {scenario}\n\n"
-        "Requirements:\n"
-        "1. For each day, increase values for footfall and ride occupancy from H11 to H18, with local peaks at H13 and H17.\n"
-        "2. For each day, after H18 (H19–H24), increase values for Crowd_Sensor_LakeArea to reflect the fireworks surge.\n"
-        "3. For Ride_Occupancy_RollerCoaster, set values to zero for H85–H87 (mid-week breakdown).\n"
-        "4. All other values should be realistic and reflect natural variations.\n"
-        "5. Return only the numerical values for each tag, separated by commas, no additional text."
-    )
-    return prompt
+    try:
+        import openai
+        # Set up Azure OpenAI config from environment
+        openai.api_type = "azure"
+        openai.api_key = os.environ.get('OPENAI_API_KEY')
+        openai.api_base = os.environ.get('OPENAI_API_BASE', 'https://oai-shared-02.openai.azure.com/')
+        openai.api_version = os.environ.get('OPENAI_API_VERSION', '2023-05-15')
+        deployment = os.environ.get('OPENAI_DEPLOYMENT_NAME', 'gpt-4o')
+
+        system_prompt = (
+            "You are an expert prompt engineer for time series data generation. "
+            "Given a user's scenario description, rewrite it as a detailed, explicit prompt for an AI timeseries generator. "
+            "Extract time periods, events, and tag-specific instructions, and write them as clear requirements. "
+            "Make sure the output is suitable for an LLM to generate realistic, scenario-driven timeseries data. "
+            "If the user provides a sequence length, include it as the number of data points. "
+            "Return only the improved prompt, no explanation."
+        )
+        user_prompt = (
+            f"Scenario: {scenario}\n\nNumber of data points: {sequence_length}\n"
+        )
+        response = openai.ChatCompletion.create(
+            deployment_id=deployment,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.2,
+            max_tokens=512
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[Azure OpenAI refine_scenario_prompt fallback] {e}")
+        # Fallback to previous rule-based template
+        prompt = (
+            f"Generate realistic hourly time series data reflecting the scenario and events described.\n"
+            f"Number of data points: {sequence_length} (one per hour for a week, H1 = Monday 00:00, H{sequence_length} = Sunday 23:00).\n\n"
+            f"Scenario: {scenario}\n\n"
+            "Requirements:\n"
+            "- Make all time/event instructions explicit and easy for an LLM to follow.\n"
+            "- Return only the numerical values for each tag, separated by commas, no additional text."
+        )
+        return prompt
