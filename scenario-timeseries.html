@@ -1344,12 +1344,32 @@
         document.getElementById('generateBtn').addEventListener('click', function() {
             savePromptToHistory(scenarioText.value);
         });
-        const refineBtn2 = document.getElementById('refinePromptBtn');
-        if (refineBtn2) {
-            refineBtn2.addEventListener('click', function() {
-                // Save after the prompt is improved (delay to allow textarea update)
-                setTimeout(() => savePromptToHistory(scenarioText.value), 500);
-            });
+        const refineBtn = document.getElementById('refinePromptBtn');
+        if (refineBtn) {
+            refineBtn.onclick = async function() {
+                const textarea = document.getElementById('scenarioText');
+                const dataLength = document.getElementById('dataLength').value;
+                const scenario = textarea.value;
+                const response = await fetch('/refine-prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scenario, sequence_length: parseInt(dataLength) })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    // Remove leading/trailing quotes if present
+                    let improved = data.refined_prompt;
+                    if (improved.startsWith('"') && improved.endsWith('"')) {
+                        improved = improved.slice(1, -1);
+                    }
+                    textarea.value = improved;
+                    showPromptImprovedMessage();
+                    // Save to history after updating textarea
+                    savePromptToHistory(improved);
+                } else {
+                    alert('Failed to refine prompt.');
+                }
+            };
         }
     </script>
 </body>

@@ -48,5 +48,5 @@ USER appuser
 # Expose port
 EXPOSE 8080
 
-# Start the API server
-CMD ["python", "api_server.py"]
+# Start the API server with uvicorn for concurrency
+CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
