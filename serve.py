@@ -36,12 +36,12 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
-def run_server(port=8000):
+def run_server(port=8001):
     """
     Start the development web server.
     
     Args:
-        port (int): Port number to listen on (default: 8000)
+        port (int): Port number to listen on (default: 8001)
     """
     server_address = ('', port)
     httpd = HTTPServer(server_address, CORSRequestHandler)

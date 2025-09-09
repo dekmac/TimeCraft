@@ -1,0 +1,226 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "TimeCraft API Server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/api_server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [],
+            "preLaunchTask": "setup-timecraft-environment",
+            "python": "${workspaceFolder}/venv/Scripts/python.exe"
+        },
+        {
+            "name": "TimeCraft Web Server",
+            "type": "debugpy",
+            "request": "launch", 
+            "program": "${workspaceFolder}/serve.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [],
+            "preLaunchTask": "setup-timecraft-environment",
+            "python": "${workspaceFolder}/venv/Scripts/python.exe"
+        },
+        {
+            "name": "TimeCraft Training & Inference",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train_inference.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [],
+            "preLaunchTask": "setup-timecraft-environment"
+        },
+        {
+            "name": "TimeDP Training",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/TimeDP/main_train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/TimeDP",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--config", "configs/mimic_icustay_base.yaml"
+            ]
+        },
+        {
+            "name": "TimeDP Visualization",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/TimeDP/visualize.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/TimeDP",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": []
+        },
+        {
+            "name": "BRIDGE Text Generation",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/BRIDGE/self_refine_main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/BRIDGE",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": []
+        },
+        {
+            "name": "BRIDGE LLM Text-to-TS",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/BRIDGE/llm4text2ts.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/BRIDGE",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": []
+        },
+        {
+            "name": "TarDiff Training",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/TarDiff/train_main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/TarDiff",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--config", "configs/text_control.yaml"
+            ]
+        },
+        {
+            "name": "TarDiff Generation",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/TarDiff/guidance_generation.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/TarDiff",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": []
+        },
+        {
+            "name": "DiGA Training",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/DiGA/train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/DiGA",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": []
+        },
+        {
+            "name": "DiGA Generation",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/DiGA/generate.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/DiGA",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": []
+        },
+        {
+            "name": "Diffusion Training",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/diffusion/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/diffusion",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--config", "configs/mimic_icustay_base.yaml"
+            ]
+        },
+        {
+            "name": "Diffusion Inference",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/diffusion/inference.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/diffusion",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": []
+        },
+        {
+            "name": ".NET React App",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-dotnet-app",
+            "program": "${workspaceFolder}/TimeCraft.Web/TimeCraft.Web/bin/Debug/net8.0/TimeCraft.Web.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/TimeCraft.Web/TimeCraft.Web",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "sourceFileMap": {
+                "/Views": "${workspaceFolder}/Views"
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "TimeCraft Full Stack (.NET React)",
+            "configurations": [
+                "TimeCraft API Server",
+                ".NET React App"
+            ],
+            "presentation": {
+                "group": "TimeCraft",
+                "order": 1
+            }
+        },
+        {
+            "name": "TimeCraft Full Stack (Legacy)",
+            "configurations": [
+                "TimeCraft API Server",
+                "TimeCraft Web Server"
+            ],
+            "presentation": {
+                "group": "TimeCraft",
+                "order": 3
+            }
+        },
+        {
+            "name": "TimeCraft Development",
+            "configurations": [
+                "TimeCraft API Server"
+            ],
+            "presentation": {
+                "group": "TimeCraft",
+                "order": 2
+            }
+        }
+    ]
+}

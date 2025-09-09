@@ -18,4 +18,5 @@ darts
 transformers
 datasets
 gdown
+python-multipart
 jsonlines

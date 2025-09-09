@@ -575,7 +575,7 @@ def handle_generate_single_timeseries(request: SingleTimeSeriesRequest, bridge_t
             print(f"Generating timeseries for {request.tag_name} with mock data")
             # Fallback to mock data generation
             patterns = ["default", "sine", "linear"]
-            pattern = patterns[tag_index % len(pattern)]
+            pattern = patterns[tag_index % len(patterns)]
             base_value = 50.0 + (tag_index * 20.0)
             
             timeseries_data = generate_mock_timeseries(

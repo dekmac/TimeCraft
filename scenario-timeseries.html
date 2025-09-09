@@ -399,7 +399,7 @@
                     sequence_length: length
                 };
 
-                const tagResponse = await fetch('/generate-tags', {
+                const tagResponse = await fetch('http://localhost:8080/generate-tags', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -445,7 +445,7 @@
                         tag_index: i
                     };
 
-                    const tsResponse = await fetch('/generate-timeseries-for-tag', {
+                    const tsResponse = await fetch('http://localhost:8080/generate-timeseries-for-tag', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -1350,7 +1350,7 @@
                 const textarea = document.getElementById('scenarioText');
                 const dataLength = document.getElementById('dataLength').value;
                 const scenario = textarea.value;
-                const response = await fetch('/refine-prompt', {
+                const response = await fetch('http://localhost:8080/refine-prompt', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ scenario, sequence_length: parseInt(dataLength) })
