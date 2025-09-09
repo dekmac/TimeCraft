@@ -107,33 +107,236 @@ class FallbackChatLLM:
             traceback.print_exc()
             print("🔄 Falling back to mock responses")
         
-        # Fall back to mock responses if API call fails
-        print("⚠️  FallbackChatLLM: Using mock responses due to API issues")
+        # Fall back to enhanced structural monitoring mock responses if API call fails
+        print("⚠️  FallbackChatLLM: Using enhanced structural monitoring mock responses")
         
-        if "tag" in str(prompt).lower():
-            # Return mock tag names for RO system
-            return "Temperature_Sensor, Pressure_Differential, Salt_Rejection_Rate, Permeate_Flow, Feed_Pressure"
+        if "tag" in str(prompt).lower() and "name" in str(prompt).lower():
+            # Return appropriate tag names for structural monitoring
+            if "bridge" in str(prompt).lower() or "structural" in str(prompt).lower():
+                return "Vibration_X_Axis, Vibration_Y_Axis, Strain_Gauge_Center, Displacement_North, Temperature_Structure"
+            elif "building" in str(prompt).lower():
+                return "Accelerometer_Floor_1, Tilt_Sensor_East, Wind_Load_Sensor, Foundation_Settlement, HVAC_Vibration"
+            else:
+                return "Temperature_Sensor, Pressure_Differential, Salt_Rejection_Rate, Permeate_Flow, Feed_Pressure"
         else:
-            # Return more diverse mock time series data
+            # Enhanced time series generation for structural monitoring
             import random
-            values = [str(round(50 + random.uniform(-10, 10), 2)) for _ in range(50)]
-            return ", ".join(values)
+            import math
+            
+            # Determine sensor type from prompt
+            prompt_lower = str(prompt).lower()
+            if "vibration" in prompt_lower:
+                return self._generate_vibration_series(prompt_lower)
+            elif "strain" in prompt_lower:
+                return self._generate_strain_series(prompt_lower)
+            elif "displacement" in prompt_lower or "settlement" in prompt_lower:
+                return self._generate_displacement_series(prompt_lower)
+            elif "temperature" in prompt_lower:
+                return self._generate_temperature_series(prompt_lower)
+            elif "tilt" in prompt_lower or "inclination" in prompt_lower:
+                return self._generate_tilt_series(prompt_lower)
+            else:
+                return self._generate_generic_structural_series(prompt_lower)
+    
+    def _generate_vibration_series(self, prompt):
+        """Generate realistic vibration sensor data for structural monitoring."""
+        import random
+        import math
+        
+        # Extract length from prompt (default 24 for hourly data)
+        length = 24
+        if "hour" in prompt:
+            if "24" in prompt: length = 24
+            elif "48" in prompt: length = 48
+        elif "day" in prompt: length = 24
+        elif "week" in prompt: length = 168
+        
+        values = []
+        for hour in range(length):
+            # Base structural vibration (0.1-0.3 mm)
+            base_vibration = 0.2 + random.uniform(-0.1, 0.1)
+            
+            # Traffic influence (higher during rush hours)
+            time_of_day = hour % 24
+            traffic_factor = 1.0
+            if 7 <= time_of_day <= 9 or 17 <= time_of_day <= 19:  # Rush hours
+                traffic_factor = 2.5 + random.uniform(0, 1.5)
+            elif 22 <= time_of_day or time_of_day <= 6:  # Night
+                traffic_factor = 0.3 + random.uniform(0, 0.2)
+            elif 10 <= time_of_day <= 16:  # Day traffic
+                traffic_factor = 1.5 + random.uniform(-0.3, 0.8)
+            
+            # Wind effects (random gusts)
+            wind_factor = 1.0 + 0.3 * math.sin(hour * 0.3) + random.uniform(-0.2, 0.2)
+            
+            # Calculate final value
+            vibration = base_vibration * traffic_factor * wind_factor
+            
+            # Add some measurement noise
+            vibration += random.uniform(-0.02, 0.02)
+            
+            # Clamp to realistic range
+            vibration = max(0.05, min(2.5, vibration))
+            values.append(round(vibration, 3))
+        
+        return ", ".join(map(str, values))
+    
+    def _generate_strain_series(self, prompt):
+        """Generate realistic strain gauge data (microstrain)."""
+        import random
+        import math
+        
+        length = 24
+        values = []
+        
+        for hour in range(length):
+            # Base strain (thermal + dead load)
+            base_strain = 150 + 30 * math.sin(hour * math.pi / 12)  # Daily thermal cycle
+            
+            # Load-induced strain (traffic, wind)
+            time_of_day = hour % 24
+            if 7 <= time_of_day <= 9 or 17 <= time_of_day <= 19:
+                load_strain = random.uniform(20, 80)  # Rush hour loads
+            elif 22 <= time_of_day or time_of_day <= 6:
+                load_strain = random.uniform(-10, 10)  # Night
+            else:
+                load_strain = random.uniform(5, 40)  # Normal day
+            
+            strain = base_strain + load_strain + random.uniform(-5, 5)
+            values.append(round(strain, 1))
+        
+        return ", ".join(map(str, values))
+    
+    def _generate_displacement_series(self, prompt):
+        """Generate realistic displacement/settlement data (mm)."""
+        import random
+        import math
+        
+        length = 24
+        values = []
+        
+        for hour in range(length):
+            # Base displacement with thermal effects
+            base_displacement = 2.0 + 0.5 * math.sin(hour * math.pi / 12)
+            
+            # Progressive settlement (very small)
+            settlement = hour * 0.001  # 0.001mm per hour
+            
+            # Dynamic response to loads
+            dynamic = random.uniform(-0.1, 0.2)
+            
+            displacement = base_displacement + settlement + dynamic
+            values.append(round(displacement, 3))
+        
+        return ", ".join(map(str, values))
+    
+    def _generate_temperature_series(self, prompt):
+        """Generate realistic structural temperature data (°C)."""
+        import random
+        import math
+        
+        length = 24
+        values = []
+        
+        for hour in range(length):
+            # Daily temperature cycle
+            time_of_day = hour % 24
+            base_temp = 20 + 8 * math.sin((time_of_day - 6) * math.pi / 12)
+            
+            # Add weather variation
+            weather_variation = random.uniform(-3, 3)
+            
+            # Thermal mass effects (structural lag)
+            if time_of_day > 0:
+                thermal_lag = 0.3 * values[-1] if values else base_temp
+                temp = 0.7 * base_temp + 0.3 * thermal_lag + weather_variation
+            else:
+                temp = base_temp + weather_variation
+            
+            values.append(round(temp, 1))
+        
+        return ", ".join(map(str, values))
+    
+    def _generate_tilt_series(self, prompt):
+        """Generate realistic tilt/inclination data (degrees)."""
+        import random
+        import math
+        
+        length = 24
+        values = []
+        base_tilt = 0.05  # Small base inclination
+        
+        for hour in range(length):
+            # Wind-induced tilt
+            wind_tilt = 0.02 * math.sin(hour * 0.5) + random.uniform(-0.01, 0.01)
+            
+            # Thermal differential tilt
+            thermal_tilt = 0.01 * math.sin(hour * math.pi / 12)
+            
+            tilt = base_tilt + wind_tilt + thermal_tilt
+            values.append(round(tilt, 4))
+        
+        return ", ".join(map(str, values))
+    
+    def _generate_generic_structural_series(self, prompt):
+        """Generate generic but realistic structural monitoring data."""
+        import random
+        
+        length = 24
+        values = []
+        
+        for hour in range(length):
+            # Base value with daily variation
+            base = 50 + 10 * random.uniform(-1, 1)
+            
+            # Add some periodic components
+            periodic = 5 * math.sin(hour * math.pi / 12) + 2 * math.sin(hour * math.pi / 6)
+            
+            # Random variation
+            noise = random.uniform(-3, 3)
+            
+            value = base + periodic + noise
+            values.append(round(value, 2))
+        
+        return ", ".join(map(str, values))
 
 
 def create_tag_generation_prompt(description: str, num_tags: int) -> str:
-    """Create a prompt for LLM-based tag name generation."""
-    return f"""Based on the following description of a monitoring system, generate {num_tags} specific and descriptive tag names that would be commonly used for sensors and metrics in this context.
+    """Create a sophisticated prompt for realistic structural monitoring tag generation."""
+    return f"""You are an expert in structural health monitoring systems. Generate {num_tags} realistic sensor tag names for the following monitoring scenario.
 
-Description: {description}
+MONITORING SCENARIO: {description}
 
-Requirements:
-1. Generate exactly {num_tags} tag names
-2. Use descriptive names that reflect the monitoring context
-3. Use proper naming conventions (e.g., Temperature_Sensor_1, Pressure_Gauge_A, Flow_Rate_Monitor)
-4. Make the names specific to the described system
-5. Separate tag names with commas
+DEVICE CATEGORIES TO INCLUDE:
+- Accelerometers (structural vibration, modal analysis)
+- Vibrometers (precise vibration measurement)
+- Strain gauges (stress/deformation monitoring)
+- Displacement sensors (LVDT, laser displacement)
+- Inclinometers (tilt/rotation measurement)
+- Piezometers (pore pressure, groundwater)
+- Extensometers (settlement, ground movement)
+- Weather stations (wind, temperature, humidity)
+- Crack monitors (crack width measurement)
+- Load cells (force/weight measurement)
 
-Return only the tag names separated by commas, no additional text."""
+NAMING CONVENTIONS:
+- Format: [LOCATION]_[DEVICE_TYPE]_[MEASUREMENT]_[ID]
+- Examples: 
+  * PIER_01_ACCEL_X_CH01 (accelerometer X-axis, pier 1, channel 1)
+  * DECK_MID_STRAIN_LONG_SG15 (strain gauge longitudinal, mid-deck, #15)
+  * TOWER_TOP_INCLIN_TILT_INC03 (inclinometer tilt, tower top, #3)
+  * FOUND_02_PIEZO_PRESS_PZ08 (piezometer pressure, foundation 2, #8)
+
+REQUIREMENTS:
+1. Generate exactly {num_tags} realistic tag names
+2. Use diverse device types appropriate for structural monitoring
+3. Include varied installation locations (foundations, decks, towers, piers, etc.)
+4. Mix measurement types (X/Y/Z axes, different strain directions, etc.)
+5. Use realistic engineering abbreviations and identifiers
+6. Ensure heterogeneous device distribution (not all the same type)
+7. Include some specialized sensors for advanced monitoring
+
+Return only the tag names separated by commas, no additional text or explanations."""
 
 
 def parse_tag_names_response(response: str, num_tags: int) -> List[str]:
@@ -184,28 +387,230 @@ def create_timeseries_generation_prompt(
     time_period: str = None
 ) -> str:
     """
-    Create a prompt for LLM-based timeseries generation, considering scenario and time period.
+    Create a sophisticated prompt for realistic structural monitoring timeseries generation.
     """
-    scenario_text = f"\nScenario: {scenario}" if scenario else ""
+    # Parse device type from tag name for specialized prompting
+    device_type = detect_device_type_from_tag(tag_name)
+    device_prompt = get_device_specific_prompt(device_type, tag_name)
+    
+    scenario_text = f"\nScenario Context: {scenario}" if scenario else ""
     time_period_text = f"\nTime Period: {time_period}" if time_period else ""
-    return (
-        f"Generate realistic time series data for the following sensor/metric:\n"
-        f"\nTag Name: {tag_name}"
-        f"\nSystem Description: {description}"
-        f"{scenario_text}"
-        f"{time_period_text}"
-        f"\nNumber of data points needed: {sequence_length}\n"
-        f"\nRequirements:"
-        f"\n1. Generate exactly {sequence_length} numerical values"
-        f"\n2. Make the values realistic for this type of sensor/metric"
-        f"\n3. Include natural variations and trends that would be expected"
-        f"\n4. Use appropriate value ranges for the sensor type"
-        f"\n5. If the scenario defines specific times or events, ensure these are reflected in the timeseries "
-        f"(e.g., visible changes at those times/events)"
-        f"\n6. The timeseries should cover the specified time period, with data points distributed accordingly"
-        f"\n7. Separate values with commas\n"
-        f"\nReturn only the numerical values separated by commas, no additional text."
-    )
+    
+    return f"""You are generating realistic time series data for a structural health monitoring system. 
+
+SENSOR DETAILS:
+Tag Name: {tag_name}
+System Description: {description}{scenario_text}{time_period_text}
+
+{device_prompt}
+
+DATA GENERATION REQUIREMENTS:
+1. Generate exactly {sequence_length} numerical values
+2. Include realistic measurement characteristics:
+   - Appropriate noise levels and measurement precision
+   - Natural drift and baseline variations
+   - Occasional data spikes or anomalies (5-10% of readings)
+   - Temperature effects and environmental influences
+3. Temporal patterns:
+   - Daily cycles (thermal expansion, traffic patterns)
+   - Random variations with realistic autocorrelation
+   - Gradual trends (structural aging, settlement)
+   - Event responses (wind gusts, vehicle loads)
+4. Data quality simulation:
+   - 2-3% outliers or measurement errors
+   - Occasional brief periods of elevated activity
+   - Realistic sensor behavior (not perfectly smooth)
+5. Engineering realism:
+   - Values should reflect real-world engineering measurements
+   - Include both positive and negative values where appropriate
+   - Show structural response to environmental conditions
+
+OUTPUT FORMAT:
+Return exactly {sequence_length} comma-separated numerical values representing sequential measurements.
+No additional text, explanations, or formatting - just the raw numerical data."""
+
+
+def detect_device_type_from_tag(tag_name: str) -> str:
+    """Detect device type from tag name for specialized prompting."""
+    tag_upper = tag_name.upper()
+    
+    if any(keyword in tag_upper for keyword in ['ACCEL', 'ACCELEROMETER']):
+        return 'accelerometer'
+    elif any(keyword in tag_upper for keyword in ['VIBRO', 'VIBROMETER']):
+        return 'vibrometer'
+    elif any(keyword in tag_upper for keyword in ['STRAIN', 'SG']):
+        return 'strain_gauge'
+    elif any(keyword in tag_upper for keyword in ['DISP', 'DISPLACEMENT', 'LVDT']):
+        return 'displacement'
+    elif any(keyword in tag_upper for keyword in ['INCLIN', 'TILT']):
+        return 'inclinometer'
+    elif any(keyword in tag_upper for keyword in ['PIEZO', 'PRESS', 'PRESSURE']):
+        return 'piezometer'
+    elif any(keyword in tag_upper for keyword in ['EXTEN', 'SETTLEMENT']):
+        return 'extensometer'
+    elif any(keyword in tag_upper for keyword in ['WEATHER', 'WIND', 'TEMP', 'HUMID']):
+        return 'weather_station'
+    elif any(keyword in tag_upper for keyword in ['CRACK', 'WIDTH']):
+        return 'crack_monitor'
+    elif any(keyword in tag_upper for keyword in ['LOAD', 'FORCE', 'WEIGHT']):
+        return 'load_cell'
+    else:
+        return 'generic_sensor'
+
+
+def get_device_specific_prompt(device_type: str, tag_name: str) -> str:
+    """Generate device-specific prompting for realistic time series generation."""
+    
+    device_prompts = {
+        'accelerometer': f"""
+DEVICE TYPE: Accelerometer ({tag_name})
+- Typical Range: ±2g to ±50g (19.6 to 490 m/s²)
+- Measurement Units: m/s² or g
+- Frequency Response: 0.1 Hz to 1000+ Hz
+- Noise Floor: 0.001-0.01 m/s² RMS
+- Behavior Characteristics:
+  * Sensitive to vibrations from traffic, wind, machinery
+  * Shows modal responses during excitation events
+  * Background noise from ambient vibrations
+  * Higher activity during daytime (traffic/human activity)
+  * May show temperature sensitivity in baseline
+- Expected Patterns: Random vibrations with occasional resonant peaks, baseline around 0""",
+
+        'vibrometer': f"""
+DEVICE TYPE: Laser Vibrometer ({tag_name})
+- Typical Range: 0.01 mm/s to 1000 mm/s velocity
+- Measurement Units: mm/s or μm/s
+- Frequency Response: DC to 20 kHz
+- Resolution: 0.001 mm/s
+- Behavior Characteristics:
+  * Extremely sensitive to minute vibrations
+  * Weather dependent (rain, fog affects laser)
+  * Shows structural modes very clearly
+  * Less noise than accelerometers
+  * May have occasional dropouts in bad weather
+- Expected Patterns: Low-amplitude oscillations with clear harmonic content""",
+
+        'strain_gauge': f"""
+DEVICE TYPE: Strain Gauge ({tag_name})
+- Typical Range: ±1000 to ±50000 microstrain (με)
+- Measurement Units: microstrain (με)
+- Resolution: 0.1 με
+- Stability: Long-term drift <2 με/year
+- Behavior Characteristics:
+  * Temperature compensation may not be perfect (±1-5 με/°C)
+  * Shows load effects from traffic, wind pressure
+  * Gradual trends from creep and relaxation
+  * Daily thermal cycles clearly visible
+  * Occasional jumps from thermal shock
+- Expected Patterns: Baseline drift with cyclic loading patterns, thermal effects""",
+
+        'displacement': f"""
+DEVICE TYPE: Displacement Sensor ({tag_name})
+- Typical Range: ±10mm to ±500mm
+- Measurement Units: mm
+- Resolution: 0.001-0.01mm
+- Linearity: ±0.01-0.1% FS
+- Behavior Characteristics:
+  * Shows structural settlement/heave clearly
+  * Temperature effects on structure cause expansion/contraction
+  * Wind loads cause reversible displacements
+  * Long-term trends from structural aging
+  * Occasional sudden movements from load events
+- Expected Patterns: Slow trends with daily thermal cycles and dynamic responses""",
+
+        'inclinometer': f"""
+DEVICE TYPE: Inclinometer ({tag_name})
+- Typical Range: ±15° to ±90°
+- Measurement Units: degrees or mrad
+- Resolution: 0.001° to 0.01°
+- Stability: 0.01°/year drift
+- Behavior Characteristics:
+  * Sensitive to foundation settlement
+  * Wind loading causes temporary tilting
+  * Temperature gradients affect readings
+  * Very slow long-term trends
+  * Occasional step changes from structural events
+- Expected Patterns: Nearly constant with small thermal variations and rare events""",
+
+        'piezometer': f"""
+DEVICE TYPE: Piezometer ({tag_name})
+- Typical Range: 0-100 kPa to 0-2000 kPa
+- Measurement Units: kPa or mH2O
+- Resolution: 0.1 kPa
+- Response Time: Minutes to hours
+- Behavior Characteristics:
+  * Seasonal variations (wet/dry cycles)
+  * Slow response to precipitation
+  * Temperature effects on fluid density
+  * Long-term trends from groundwater changes
+  * Barometric pressure effects (0.1-1 kPa)
+- Expected Patterns: Gradual changes with seasonal cycles and weather effects""",
+
+        'extensometer': f"""
+DEVICE TYPE: Extensometer ({tag_name})
+- Typical Range: 0-50mm to 0-1000mm cumulative
+- Measurement Units: mm
+- Resolution: 0.01mm
+- Stability: Excellent long-term
+- Behavior Characteristics:
+  * Monotonic settlement in most cases
+  * Temperature expansion/contraction cycles
+  * Rate changes with load or water conditions
+  * Occasional acceleration during events
+  * Nearly irreversible cumulative movement
+- Expected Patterns: Gradually increasing values with thermal oscillations""",
+
+        'weather_station': f"""
+DEVICE TYPE: Weather Station ({tag_name})
+- Parameter dependent:
+  * Wind Speed: 0-50 m/s, gusty patterns
+  * Temperature: -40°C to +60°C, daily cycles
+  * Humidity: 0-100%, weather dependent
+  * Pressure: 950-1050 hPa, gradual changes
+- Behavior Characteristics:
+  * Strong daily and seasonal cycles
+  * Weather front passages cause rapid changes
+  * Wind shows turbulent, gusty behavior
+  * Temperature has clear diurnal patterns
+- Expected Patterns: Realistic meteorological variations""",
+
+        'crack_monitor': f"""
+DEVICE TYPE: Crack Width Monitor ({tag_name})
+- Typical Range: 0-50mm crack width
+- Measurement Units: mm
+- Resolution: 0.001mm
+- Stability: Good long-term tracking
+- Behavior Characteristics:
+  * Thermal expansion/contraction dominates
+  * Structural loading effects
+  * Long-term growth trends in active cracks
+  * Daily thermal cycles prominent
+  * Occasional sudden changes during events
+- Expected Patterns: Cyclic thermal variations with possible growth trends""",
+
+        'load_cell': f"""
+DEVICE TYPE: Load Cell ({tag_name})
+- Typical Range: 0-10 kN to 0-10 MN
+- Measurement Units: kN or MN
+- Resolution: 0.01-0.1% FS
+- Stability: ±0.02% FS/year
+- Behavior Characteristics:
+  * Live load variations from traffic/people
+  * Temperature effects on structure and sensor
+  * Dead load changes from added materials
+  * Dynamic responses to loading events
+  * Possible baseline drift over time
+- Expected Patterns: Baseline load with traffic/loading variations and thermal effects""",
+
+        'generic_sensor': f"""
+DEVICE TYPE: Generic Sensor ({tag_name})
+- Generate realistic monitoring data appropriate for structural health monitoring
+- Include natural variations, noise, and measurement characteristics
+- Show both short-term dynamic responses and long-term trends
+- Include environmental effects and realistic engineering behavior"""
+    }
+    
+    return device_prompts.get(device_type, device_prompts['generic_sensor'])
 
 
 def parse_timeseries_response(response: str, tag_name: str, sequence_length: int, 
