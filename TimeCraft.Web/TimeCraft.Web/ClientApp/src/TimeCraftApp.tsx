@@ -5,7 +5,6 @@ import { Header } from './components/Header';
 import { InputForm } from './components/InputForm';
 import { ErrorDisplay } from './components/ErrorDisplay';
 import { TagsDisplay } from './components/TagsDisplay';
-import { TimeSeriesChart } from './components/TimeSeriesChart';
 
 export const TimeCraftApp: React.FC = () => {
   const {
@@ -16,7 +15,6 @@ export const TimeCraftApp: React.FC = () => {
     isLoading,
     tags,
     tagProgress,
-    timeSeriesData,
     error,
     generateTimeSeries
   } = useTimeCraft();
@@ -37,11 +35,11 @@ export const TimeCraftApp: React.FC = () => {
 
         <ErrorDisplay error={error} />
         
-        <TagsDisplay tags={tags} tagProgress={tagProgress} />
-
-        {timeSeriesData.length > 0 && (
-          <TimeSeriesChart timeSeriesData={timeSeriesData} dataLength={dataLength} />
-        )}
+        <TagsDisplay 
+          tags={tags} 
+          tagProgress={tagProgress} 
+          dataLength={dataLength} 
+        />
       </div>
     </div>
   );

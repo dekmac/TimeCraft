@@ -1,9 +1,11 @@
 import React from 'react';
+import { MiniTimeSeriesChart } from './MiniTimeSeriesChart';
 import type { GeneratedTag, TagProgress, TagProgressStatus } from '../types/api';
 
 interface TagsDisplayProps {
   tags: GeneratedTag[];
   tagProgress?: TagProgress[];
+  dataLength: number;
 }
 
 const getStatusIcon = (status: TagProgressStatus) => {
@@ -63,7 +65,7 @@ const getStatusColor = (status: TagProgressStatus) => {
   }
 };
 
-export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress }) => {
+export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dataLength }) => {
   if (tags.length === 0) {
     return null;
   }
@@ -92,7 +94,22 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress }) =
                   )}
                 </div>
               </div>
-              <p className="text-sm text-gray-600 mb-2">{tag.description}</p>
+              <p className="text-sm text-gray-600 mb-3">{tag.description}</p>
+              
+              {/* Mini Time Series Chart */}
+              {progress?.timeSeriesData && (
+                <div className="mb-3">
+                  <MiniTimeSeriesChart 
+                    data={progress.timeSeriesData.data} 
+                    tagName={tag.tag}
+                    dataLength={dataLength}
+                  />
+                  <div className="mt-1 text-xs text-gray-500 text-center">
+                    Range: {Math.min(...progress.timeSeriesData.data).toFixed(3)} - {Math.max(...progress.timeSeriesData.data).toFixed(3)}
+                  </div>
+                </div>
+              )}
+              
               <div className="flex items-center justify-between">
                 <span className={`text-xs font-medium ${getStatusColor(status)}`}>
                   {getStatusText(status)}

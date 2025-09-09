@@ -31,7 +31,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       },
       title: {
         display: true,
-        text: 'Generated Time Series Data',
+        text: 'Time Series Overview - All Sensors',
       },
     },
     scales: {
@@ -42,11 +42,8 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
   };
 
   return (
-    <div className="glass-effect p-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Generated Time Series</h3>
-      <div className="chart-container">
-        <Line data={chartData} options={chartOptions} />
-      </div>
+    <div className="chart-container">
+      <Line data={chartData} options={chartOptions} />
     </div>
   );
 };
