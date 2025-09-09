@@ -6,6 +6,7 @@ interface TagsDisplayProps {
   tags: GeneratedTag[];
   tagProgress?: TagProgress[];
   dataLength: number;
+  onRetryTag?: (tagIndex: number) => void;
 }
 
 const getStatusIcon = (status: TagProgressStatus) => {
@@ -65,7 +66,7 @@ const getStatusColor = (status: TagProgressStatus) => {
   }
 };
 
-export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dataLength }) => {
+export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dataLength, onRetryTag }) => {
   if (tags.length === 0) {
     return null;
   }
@@ -114,11 +115,22 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dat
                 <span className={`text-xs font-medium ${getStatusColor(status)}`}>
                   {getStatusText(status)}
                 </span>
-                {progress?.error && (
-                  <span className="text-xs text-red-500" title={progress.error}>
-                    ⚠️
-                  </span>
-                )}
+                <div className="flex items-center space-x-2">
+                  {progress?.error && (
+                    <span className="text-xs text-red-500" title={progress.error}>
+                      ⚠️
+                    </span>
+                  )}
+                  {status === 'error' && onRetryTag && (
+                    <button
+                      onClick={() => onRetryTag(index)}
+                      className="text-xs bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded transition-colors duration-200"
+                      title="Retry generating time series for this tag"
+                    >
+                      🔄 Retry
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );

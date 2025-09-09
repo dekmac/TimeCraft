@@ -29,6 +29,79 @@ export const useTimeCraft = () => {
     setTagProgress([]);
     setTimeSeriesData([]);
 
+    await generateTagsAndTimeSeries();
+  };
+
+  const generateAdditionalTags = async () => {
+    if (!description.trim()) {
+      setError('Please enter a description');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    await generateTagsAndTimeSeries(true); // additive mode
+  };
+
+  const retryTag = async (tagIndex: number) => {
+    const tag = tagProgress[tagIndex];
+    if (!tag) return;
+
+    // Update status to generating
+    updateTagProgress(tagIndex, { 
+      status: 'generating-timeseries',
+      error: undefined 
+    });
+
+    try {
+      console.log(`Retrying time series generation for tag: ${tag.tag}`);
+      
+      const tsResponse = await timeCraftApi.generateTimeSeries({
+        tag: tag.tag,
+        scenario: description
+      });
+
+      if (!tsResponse.success) {
+        throw new Error(tsResponse.message || 'Failed to generate time series');
+      }
+
+      // Create time series data
+      const timeSeriesEntry: TimeSeriesData = {
+        name: tsResponse.tagName,
+        data: tsResponse.timeSeries,
+        timestamps: tsResponse.timestamps
+      };
+
+      // Update progress with completed time series
+      updateTagProgress(tagIndex, { 
+        status: 'complete',
+        timeSeriesData: timeSeriesEntry
+      });
+
+      // Add to time series data (replace if exists)
+      setTimeSeriesData(prev => {
+        const filtered = prev.filter(ts => ts.name !== timeSeriesEntry.name);
+        return [...filtered, timeSeriesEntry];
+      });
+
+    } catch (tagError: unknown) {
+      console.error(`Error retrying time series for tag ${tag.tag}:`, tagError);
+      
+      let errorMessage = 'Failed to generate time series';
+      if (tagError instanceof Error) {
+        errorMessage = tagError.message;
+      }
+
+      updateTagProgress(tagIndex, { 
+        status: 'error',
+        error: errorMessage
+      });
+    }
+  };
+
+  const generateTagsAndTimeSeries = async (additive: boolean = false) => {
+
     try {
       console.log('Generating tags for description:', description);
       
@@ -40,22 +113,37 @@ export const useTimeCraft = () => {
       }
 
       const generatedTags = tagsResponse.tags;
-      setTags(generatedTags);
+      
+      // In additive mode, append to existing tags; otherwise replace
+      if (additive) {
+        setTags(prev => [...prev, ...generatedTags]);
+      } else {
+        setTags(generatedTags);
+      }
 
-      // Initialize progress for each tag
-      const initialProgress: TagProgress[] = generatedTags.map(tag => ({
+      // Initialize progress for new tags
+      const newProgress: TagProgress[] = generatedTags.map(tag => ({
         ...tag,
         status: 'tag-complete' as TagProgressStatus
       }));
-      setTagProgress(initialProgress);
 
-      // Step 2: Generate time series for each tag progressively
+      if (additive) {
+        setTagProgress(prev => [...prev, ...newProgress]);
+      } else {
+        setTagProgress(newProgress);
+      }
+
+      // Get the starting index for new tags
+      const startIndex = additive ? tagProgress.length : 0;
+
+      // Step 2: Generate time series for each new tag progressively
       for (let i = 0; i < generatedTags.length; i++) {
+        const tagIndex = startIndex + i;
         const tag = generatedTags[i];
         
         try {
           // Update status to generating time series
-          updateTagProgress(i, { status: 'generating-timeseries' });
+          updateTagProgress(tagIndex, { status: 'generating-timeseries' });
 
           console.log(`Generating time series for tag: ${tag.tag}`);
           
@@ -76,7 +164,7 @@ export const useTimeCraft = () => {
           };
 
           // Update progress with completed time series
-          updateTagProgress(i, { 
+          updateTagProgress(tagIndex, { 
             status: 'complete',
             timeSeriesData: timeSeriesEntry
           });
@@ -92,7 +180,7 @@ export const useTimeCraft = () => {
             errorMessage = tagError.message;
           }
 
-          updateTagProgress(i, { 
+          updateTagProgress(tagIndex, { 
             status: 'error',
             error: errorMessage
           });
@@ -126,6 +214,8 @@ export const useTimeCraft = () => {
     tagProgress,
     timeSeriesData,
     error,
-    generateTimeSeries
+    generateTimeSeries,
+    generateAdditionalTags,
+    retryTag
   };
 };
