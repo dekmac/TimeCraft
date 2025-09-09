@@ -105,13 +105,50 @@ class FallbackChatLLM:
             print(f"   Full traceback:")
             import traceback
             traceback.print_exc()
+            
+            # Try regular OpenAI as fallback
+            try:
+                print(f"🔄 Trying regular OpenAI as fallback...")
+                from openai import OpenAI
+                
+                # Check for regular OpenAI key in environment
+                regular_openai_key = os.environ.get('OPENAI_API_KEY_REGULAR') or os.environ.get('OPENAI_KEY')
+                if regular_openai_key:
+                    print(f"✅ Regular OpenAI key found, attempting connection...")
+                    
+                    client = OpenAI(api_key=regular_openai_key)
+                    response = client.chat.completions.create(
+                        model="gpt-4o" if "gpt-4" in self.model_name else "gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant that generates realistic time series data for structural monitoring applications."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=self.temperature
+                    )
+                    
+                    result = response.choices[0].message.content
+                    print(f"✅ Regular OpenAI API call successful!")
+                    print(f"📝 Response: {result[:100]}...")
+                    return result
+                else:
+                    print(f"❌ No regular OpenAI key found (OPENAI_API_KEY_REGULAR or OPENAI_KEY)")
+                    
+            except Exception as openai_error:
+                print(f"❌ Regular OpenAI also failed: {openai_error}")
+            
             print("🔄 Falling back to mock responses")
         
         # Fall back to enhanced structural monitoring mock responses if API call fails
         print("⚠️  FallbackChatLLM: Using enhanced structural monitoring mock responses")
         
-        if "tag" in str(prompt).lower() and "name" in str(prompt).lower():
-            # Return appropriate tag names for structural monitoring
+        # Check if this is a tag generation request or time series generation request
+        if ("generate" in str(prompt).lower() and 
+            ("tag" in str(prompt).lower() or "name" in str(prompt).lower()) and
+            "time series" not in str(prompt).lower() and
+            "timeseries" not in str(prompt).lower() and
+            "numerical" not in str(prompt).lower() and
+            "values" not in str(prompt).lower()):
+            # This is a TAG GENERATION request
             if "bridge" in str(prompt).lower() or "structural" in str(prompt).lower():
                 return "Vibration_X_Axis, Vibration_Y_Axis, Strain_Gauge_Center, Displacement_North, Temperature_Structure"
             elif "building" in str(prompt).lower():
@@ -119,7 +156,7 @@ class FallbackChatLLM:
             else:
                 return "Temperature_Sensor, Pressure_Differential, Salt_Rejection_Rate, Permeate_Flow, Feed_Pressure"
         else:
-            # Enhanced time series generation for structural monitoring
+            # This is a TIME SERIES GENERATION request - generate numerical data
             import random
             import math
             
@@ -658,16 +695,27 @@ def generate_timeseries_with_llm(tag_name: str, description: str,
         prompt = create_timeseries_generation_prompt(
             tag_name, description, sequence_length
         )
-        print(f"Generating timeseries for {tag_name} with prompt: '{prompt[:50]}...'")
-          # Use the model directly, regardless of whether it's GPT-4o or any other model
-        print(f"Attempting to generate timeseries with model: {getattr(chat_llm, 'model_name', 'unknown')}")
+        print(f"🤖 Generating timeseries for {tag_name} with LLM")
+        print(f"📝 Prompt (first 100 chars): '{prompt[:100]}...'")
+        print(f"🎯 Model: {getattr(chat_llm, 'model_name', 'unknown')}")
             
         response = chat_llm.generate(prompt)
-        print(f"LLM timeseries response for {tag_name}: '{response[:50]}...'")
-        return parse_timeseries_response(response, tag_name, sequence_length, tag_index)
+        print(f"✅ LLM response received for {tag_name}")
+        print(f"📊 Response (first 100 chars): '{response[:100]}...'")
+        
+        parsed_data = parse_timeseries_response(response, tag_name, sequence_length, tag_index)
+        print(f"✅ Successfully parsed {len(parsed_data)} values for {tag_name}")
+        print(f"📈 Range: {min(parsed_data):.3f} to {max(parsed_data):.3f}")
+        
+        return parsed_data
+        
     except Exception as e:
-        print(f"Error generating timeseries with LLM for {tag_name}: {e}")
-        print(f"Falling back to mock data generation for {tag_name}")
+        print(f"❌ ERROR in generate_timeseries_with_llm for {tag_name}: {e}")
+        print(f"   Error type: {type(e).__name__}")
+        import traceback
+        print(f"   Full traceback:")
+        traceback.print_exc()
+        print(f"🔄 Falling back to mock data generation for {tag_name}")
         
         # Determine pattern based on tag name to generate more realistic data
         if "temperature" in tag_name.lower():

@@ -60,13 +60,103 @@ def cleanup_temp_file(file_path: str):
 
 def generate_mock_timeseries(length: int = 168, pattern_type: str = "default", 
                            base_value: float = 1.0) -> List[float]:
-    """Generate mock time series data for demo responses."""
+    """Generate realistic structural monitoring time series data."""
+    import random
+    
+    # Time array (hours)
+    time = np.linspace(0, length/24, length)  # Convert to days
+    
     if pattern_type == "sine":
-        return [base_value + np.sin(i * 0.1) * 5 + np.random.normal(0, 1) for i in range(length)]
+        # Multi-frequency structural vibration pattern
+        # Primary structural mode + harmonics + environmental effects
+        data = []
+        for i, t in enumerate(time):
+            # Primary structural resonance (0.5-2 Hz scaled to daily cycle)
+            primary_freq = base_value * 0.01  # Scale base_value to frequency
+            structural = 0.1 * np.sin(2 * np.pi * primary_freq * t)
+            
+            # Environmental daily cycle (temperature/traffic effects)
+            daily_cycle = 0.05 * np.sin(2 * np.pi * t)  # 24-hour cycle
+            
+            # Traffic rush hour effects (higher amplitude 7-9am, 5-7pm)
+            hour = (t * 24) % 24
+            rush_factor = 1.0
+            if 7 <= hour <= 9 or 17 <= hour <= 19:
+                rush_factor = 1.5 + 0.3 * np.sin(2 * np.pi * (hour - 7) / 4)
+            
+            # Random vibrations + measurement noise
+            random_vibration = np.random.normal(0, 0.02)
+            measurement_noise = np.random.normal(0, 0.005)
+            
+            # Combine all effects
+            base_component = base_value * 0.001
+            dynamic_component = (structural + daily_cycle) * rush_factor
+            noise_component = random_vibration + measurement_noise
+            value = base_component + dynamic_component + noise_component
+            data.append(max(0, value))  # Ensure positive values
+            
+        return data
+        
     elif pattern_type == "linear":
-        return [base_value + i * 0.1 + np.random.normal(0, 0.5) for i in range(length)]
+        # Strain gauge or displacement - shows trends + cycles
+        data = []
+        base_strain = base_value * 0.1  # Convert to microstrain scale
+        
+        for i, t in enumerate(time):
+            # Long-term structural settlement/drift
+            long_term_trend = 0.01 * t  # Gradual increase
+            
+            # Daily thermal expansion/contraction
+            thermal_cycle = 0.5 * np.sin(2 * np.pi * t - np.pi/4)
+            
+            # Load effects (traffic, wind)
+            hour = (t * 24) % 24
+            load_effect = 0.0
+            if 6 <= hour <= 22:  # Daytime activity
+                sin_component = np.sin(2 * np.pi * (hour - 6) / 16)
+                load_effect = 0.2 * (1 + 0.3 * sin_component)
+            
+            # Measurement noise and micro-vibrations
+            noise = np.random.normal(0, 0.05)
+            
+            components = [base_strain, long_term_trend, thermal_cycle,
+                          load_effect, noise]
+            value = sum(components)
+            data.append(value)
+            
+        return data
+        
     else:
-        return [base_value + (i % 10) + np.random.normal(0, 0.2) for i in range(length)]
+        # Default: Mixed sensor behavior (pressure, inclinometer, etc.)
+        data = []
+        base_pressure = base_value
+        
+        for i, t in enumerate(time):
+            # Weather-driven variations (barometric pressure effects)
+            weather_pattern = 2 * np.pi * t / 3 + random.random() * 2 * np.pi
+            weather_cycle = 0.2 * np.sin(weather_pattern)
+            
+            # Daily environmental effects
+            daily_variation = 0.1 * np.sin(2 * np.pi * t + np.pi/6)
+            
+            # Seasonal drift (very slow)
+            seasonal_drift = 0.05 * np.sin(2 * np.pi * t / 365)
+            
+            # Random fluctuations
+            random_noise = np.random.normal(0, 0.08)
+            
+            # Occasional events (structural events, maintenance, etc.)
+            event_probability = 0.001  # Very rare
+            event_magnitude = 0.0
+            if random.random() < event_probability:
+                event_magnitude = np.random.normal(0, 0.5)
+            
+            components = [base_pressure, weather_cycle, daily_variation,
+                          seasonal_drift, random_noise, event_magnitude]
+            value = sum(components)
+            data.append(value)
+            
+        return data
 
 
 def generate_mock_domain_series(domain_type: str, length: int, num_samples: int) -> List[List[float]]:
