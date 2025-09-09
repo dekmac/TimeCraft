@@ -26,7 +26,8 @@ export interface GenerateTimeSeriesRequest {
 
 export interface GenerateTimeSeriesResponse {
     success: boolean;
-    time_series: number[];
+    tagName: string;
+    timeSeries: number[];
     timestamps: string[];
     message?: string;
 }

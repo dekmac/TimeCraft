@@ -118,24 +118,47 @@ public class PythonApiService : IPythonApiService
             _logger.LogInformation("Python API response for time series: {Response}", responseJson);
             var result = JsonSerializer.Deserialize<JsonElement>(responseJson);
             
-            var data = new List<TimeSeriesDataPoint>();
-            if (result.TryGetProperty("data", out var dataElement) && dataElement.ValueKind == JsonValueKind.Array)
+            // Parse the Python API response structure
+            var success = result.TryGetProperty("status", out var statusElement) && 
+                         statusElement.GetString() == "success";
+            
+            var message = result.TryGetProperty("message", out var messageElement) 
+                ? messageElement.GetString() ?? "Time series generated"
+                : "Time series generated";
+            
+            var tagName = result.TryGetProperty("tag_name", out var tagNameElement)
+                ? tagNameElement.GetString() ?? ""
+                : "";
+            
+            var timeSeries = new List<double>();
+            if (result.TryGetProperty("timeseries", out var timeseriesElement) && 
+                timeseriesElement.ValueKind == JsonValueKind.Array)
             {
-                foreach (var item in dataElement.EnumerateArray())
+                foreach (var item in timeseriesElement.EnumerateArray())
                 {
-                    if (item.TryGetProperty("time", out var timeElement) && 
-                        item.TryGetProperty("value", out var valueElement))
+                    if (item.ValueKind == JsonValueKind.Number)
                     {
-                        data.Add(new TimeSeriesDataPoint
-                        {
-                            Time = timeElement.GetString(),
-                            Value = valueElement.GetDouble()
-                        });
+                        timeSeries.Add(item.GetDouble());
                     }
                 }
             }
             
-            return new GenerateTimeSeriesResponse { Data = data };
+            // Generate timestamps for the time series (assuming hourly data)
+            var timestamps = new List<string>();
+            var startTime = DateTime.UtcNow.AddHours(-timeSeries.Count);
+            for (int i = 0; i < timeSeries.Count; i++)
+            {
+                timestamps.Add(startTime.AddHours(i).ToString("yyyy-MM-ddTHH:mm:ssZ"));
+            }
+            
+            return new GenerateTimeSeriesResponse 
+            { 
+                Success = success,
+                Message = message,
+                TagName = tagName,
+                TimeSeries = timeSeries,
+                Timestamps = timestamps
+            };
         }
         catch (Exception ex)
         {

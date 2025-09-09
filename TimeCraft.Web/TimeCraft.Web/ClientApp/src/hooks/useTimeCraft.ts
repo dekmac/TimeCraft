@@ -48,13 +48,15 @@ export const useTimeCraft = () => {
           scenario: description
         });
 
+        console.log('Time series response:', tsResponse);
+
         if (!tsResponse.success) {
           throw new Error(`Failed to generate time series for tag: ${tag.tag}`);
         }
 
         return {
           name: tag.tag,
-          data: tsResponse.time_series,
+          data: tsResponse.timeSeries,
           timestamps: tsResponse.timestamps
         };
       });
