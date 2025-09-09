@@ -44,27 +44,46 @@ class FallbackChatLLM:
     
     def generate(self, prompt):
         """Generate method that mimics the BRIDGE ChatLLM interface."""
+        print(f"🔍 FallbackChatLLM.generate() called with model: {self.model_name}")
+        print(f"🔍 Environment check:")
+        print(f"   OPENAI_API_KEY: {'SET' if os.environ.get('OPENAI_API_KEY') else 'NOT SET'}")
+        print(f"   OPENAI_API_BASE: {os.environ.get('OPENAI_API_BASE', 'NOT SET')}")
+        print(f"   OPENAI_DEPLOYMENT_NAME: {os.environ.get('OPENAI_DEPLOYMENT_NAME', 'NOT SET')}")
+        print(f"   OPENAI_API_VERSION: {os.environ.get('OPENAI_API_VERSION', 'NOT SET')}")
+        
         # Try to use the actual API first
         try:
-            import openai
+            from openai import AzureOpenAI
+            print(f"✅ OpenAI library imported successfully (v1 syntax)")
             
             # Configure for Azure OpenAI - use explicit endpoint and deployment
             if os.environ.get('OPENAI_API_KEY'):
-                # Set Azure OpenAI specific configuration
-                openai.api_type = "azure"
-                openai.api_key = os.environ.get('OPENAI_API_KEY')
-                openai.api_base = os.environ.get(
-                    'OPENAI_API_BASE', 'https://oai-shared-02.openai.azure.com/')
-                openai.api_version = os.environ.get('OPENAI_API_VERSION', '2023-05-15')
+                print(f"🔄 Configuring Azure OpenAI...")
                 
-                print(f"Using Azure OpenAI: {openai.api_base}, Model: {self.model_name}")
+                api_base = os.environ.get('OPENAI_API_BASE', 'https://oai-shared-02.openai.azure.com/')
+                api_version = os.environ.get('OPENAI_API_VERSION', '2023-05-15')
+                api_key = os.environ.get('OPENAI_API_KEY')
+                
+                print(f"✅ Azure OpenAI configured:")
+                print(f"   api_base: {api_base}")
+                print(f"   api_version: {api_version}")
+                print(f"   model_name: {self.model_name}")
                 
                 # When using Azure OpenAI, we use the deployment name
                 deployment = os.environ.get('OPENAI_DEPLOYMENT_NAME', 'gpt-4o')
+                print(f"   deployment: {deployment}")
                 
-                # Create completion
-                response = openai.ChatCompletion.create(
-                    deployment_id=deployment,  # Use deployment_id for Azure OpenAI
+                # Create Azure OpenAI client
+                client = AzureOpenAI(
+                    azure_endpoint=api_base,
+                    api_key=api_key,
+                    api_version=api_version
+                )
+                
+                print(f"🚀 Making Azure OpenAI API call...")
+                # Create completion using new v1 syntax
+                response = client.chat.completions.create(
+                    model=deployment,  # Use deployment name as model
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant that returns only the requested data without explanation."},
                         {"role": "user", "content": prompt}
@@ -72,15 +91,24 @@ class FallbackChatLLM:
                     temperature=self.temperature
                 )
                 
+                print(f"✅ Azure OpenAI API call successful!")
                 # Extract text response
-                return response.choices[0].message.content
+                result = response.choices[0].message.content
+                print(f"📝 Response: {result[:100]}...")
+                return result
+            else:
+                print(f"❌ OPENAI_API_KEY not found in environment")
                 
         except Exception as e:
-            print(f"Azure OpenAI API call failed: {e}")
-            print("Falling back to mock responses")
+            print(f"❌ Azure OpenAI API call failed: {e}")
+            print(f"   Exception type: {type(e).__name__}")
+            print(f"   Full traceback:")
+            import traceback
+            traceback.print_exc()
+            print("🔄 Falling back to mock responses")
         
         # Fall back to mock responses if API call fails
-        print("FallbackChatLLM: Using mock responses due to API issues")
+        print("⚠️  FallbackChatLLM: Using mock responses due to API issues")
         
         if "tag" in str(prompt).lower():
             # Return mock tag names for RO system
@@ -421,6 +449,11 @@ def handle_target_aware_generation(request: TargetAwareGenerationRequest, tardif
 
 def handle_generate_tags(request: TagGenerationRequest, bridge_text2ts_available: bool) -> JSONResponse:
     """Generate tag names from text description."""
+    print(f"🏷️  === HANDLE_GENERATE_TAGS CALLED ===")
+    print(f"🏷️  Request: {request}")
+    print(f"🏷️  Text description: '{request.text_description}'")
+    print(f"🏷️  Bridge available: {bridge_text2ts_available}")
+    
     try:
         print(f"Tag generation started - bridge_text2ts_available: {bridge_text2ts_available}")
         
@@ -428,35 +461,37 @@ def handle_generate_tags(request: TagGenerationRequest, bridge_text2ts_available
         llm_available = False
         chat_llm = None
         
-        # Check if we can use LLM (either full BRIDGE ChatLLM or fallback)
-        if bridge_text2ts_available:
+        print(f"🔄 Attempting LLM-based tag generation...")
+        
+        # Always try FallbackChatLLM first (bypass BRIDGE dependency issues)
+        try:
+            model_name = getattr(request, 'model_name', 'gpt-4o')
+            print(f"🚀 Creating FallbackChatLLM with model: {model_name}")
+            
+            chat_llm = FallbackChatLLM(
+                model_name=model_name,
+                temperature=getattr(request, 'temperature', 0.1)
+            )
+            llm_available = True
+            print(f"✅ FallbackChatLLM created successfully")
+        except Exception as e:
+            print(f"❌ FallbackChatLLM failed: {e}")
+        
+        # Only try BRIDGE if FallbackChatLLM failed
+        if not llm_available and bridge_text2ts_available:
             try:
                 from BRIDGE.llm_agents.llm import ChatLLM
                 model_name = getattr(request, 'model_name', 'gpt-3.5-turbo')
-                print(f"Attempting to use model: {model_name}")
+                print(f"🔄 Falling back to BRIDGE ChatLLM with model: {model_name}")
                 
                 chat_llm = ChatLLM(
                     model_name=model_name,
                     temperature=getattr(request, 'temperature', 0.1)
                 )
                 llm_available = True
-                print(f"Using full BRIDGE ChatLLM with model {model_name}")
+                print(f"✅ Using full BRIDGE ChatLLM with model {model_name}")
             except (ImportError, Exception) as e:
-                print(f"Full BRIDGE ChatLLM not available: {e}")
-                # Try fallback ChatLLM
-                try:
-                    model_name = getattr(request, 'model_name', 'gpt-3.5-turbo')
-                    print(f"Using model {model_name} with fallback handler")
-                    
-                    chat_llm = FallbackChatLLM(
-                        model_name=model_name,
-                        temperature=getattr(request, 'temperature', 0.1)
-                    )
-                    # Using mock generation is safer to avoid API deployment errors
-                    llm_available = False
-                    print(f"Using fallback ChatLLM - Using mock data to avoid API deployment errors")
-                except Exception as e2:
-                    print(f"Fallback ChatLLM failed: {e2}")
+                print(f"❌ Full BRIDGE ChatLLM failed: {e}")
         
         # Step 2: Generate tag names using the best available method
         if llm_available and chat_llm:
@@ -504,35 +539,37 @@ def handle_generate_single_timeseries(request: SingleTimeSeriesRequest, bridge_t
         llm_available = False
         chat_llm = None
         
-        # Check if we can use LLM (either full BRIDGE ChatLLM or fallback)
-        if bridge_text2ts_available:
+        print(f"🔄 Attempting LLM-based timeseries generation...")
+        
+        # Always try FallbackChatLLM first (bypass BRIDGE dependency issues)
+        try:
+            model_name = getattr(request, 'model_name', 'gpt-4o')
+            print(f"🚀 Creating FallbackChatLLM with model: {model_name}")
+            
+            chat_llm = FallbackChatLLM(
+                model_name=model_name,
+                temperature=getattr(request, 'temperature', 0.1)
+            )
+            llm_available = True
+            print(f"✅ FallbackChatLLM created successfully for timeseries")
+        except Exception as e:
+            print(f"❌ FallbackChatLLM failed for timeseries: {e}")
+        
+        # Only try BRIDGE if FallbackChatLLM failed
+        if not llm_available and bridge_text2ts_available:
             try:
                 from BRIDGE.llm_agents.llm import ChatLLM
                 model_name = getattr(request, 'model_name', 'gpt-3.5-turbo')
-                print(f"Attempting to use model: {model_name}")
+                print(f"🔄 Falling back to BRIDGE ChatLLM for timeseries")
                 
                 chat_llm = ChatLLM(
                     model_name=model_name,
                     temperature=getattr(request, 'temperature', 0.1)
                 )
                 llm_available = True
-                print(f"Using full BRIDGE ChatLLM with model {model_name}")
+                print(f"✅ Using full BRIDGE ChatLLM for timeseries")
             except (ImportError, Exception) as e:
-                print(f"Full BRIDGE ChatLLM not available: {e}")
-                # Try fallback ChatLLM
-                try:
-                    model_name = getattr(request, 'model_name', 'gpt-3.5-turbo')
-                    print(f"Using model {model_name} with fallback handler")
-                    
-                    chat_llm = FallbackChatLLM(
-                        model_name=model_name,
-                        temperature=getattr(request, 'temperature', 0.1)
-                    )
-                    # Using mock generation is safer to avoid API deployment errors
-                    llm_available = False
-                    print(f"Using fallback ChatLLM - Using mock data to avoid API deployment errors")
-                except Exception as e2:
-                    print(f"Fallback ChatLLM failed: {e2}")
+                print(f"❌ Full BRIDGE ChatLLM failed for timeseries: {e}")
         
         # Step 2: Generate timeseries data using the best available method
         tag_index = getattr(request, 'tag_index', 0)

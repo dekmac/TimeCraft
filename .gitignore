@@ -9,3 +9,13 @@ __pycache__/
 logs/
 site-packages/
 venv/
+
+# Environment files with secrets
+.env
+.env.local
+.env.development
+.env.production
+
+# Visual Studio / VS Code
+.vs/
+.vscode/settings.json

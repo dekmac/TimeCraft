@@ -9,6 +9,14 @@ export interface GeneratedTag {
     description: string;
 }
 
+export type TagProgressStatus = 'pending' | 'generating-tag' | 'tag-complete' | 'generating-timeseries' | 'complete' | 'error';
+
+export interface TagProgress extends GeneratedTag {
+    status: TagProgressStatus;
+    error?: string;
+    timeSeriesData?: TimeSeriesData;
+}
+
 export interface GenerateTagsRequest {
   text: string;
 }

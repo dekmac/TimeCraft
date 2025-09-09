@@ -23,7 +23,11 @@
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "OPENAI_API_BASE": "https://azure-openai-hou-hmi-2025.openai.azure.com/",
+                "OPENAI_API_VERSION": "2024-12-01-preview",
+                "OPENAI_DEPLOYMENT_NAME": "gpt-4o",
+                "OPENAI_API_KEY": "${env:OPENAI_API_KEY}"
             },
             "args": [],
             "preLaunchTask": "setup-timecraft-environment",

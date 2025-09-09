@@ -7,7 +7,7 @@ import { ErrorDisplay } from './components/ErrorDisplay';
 import { TagsDisplay } from './components/TagsDisplay';
 import { TimeSeriesChart } from './components/TimeSeriesChart';
 
-const TimeCraftApp: React.FC = () => {
+export const TimeCraftApp: React.FC = () => {
   const {
     description,
     setDescription,
@@ -15,6 +15,7 @@ const TimeCraftApp: React.FC = () => {
     setDataLength,
     isLoading,
     tags,
+    tagProgress,
     timeSeriesData,
     error,
     generateTimeSeries
@@ -36,7 +37,7 @@ const TimeCraftApp: React.FC = () => {
 
         <ErrorDisplay error={error} />
         
-        <TagsDisplay tags={tags} />
+        <TagsDisplay tags={tags} tagProgress={tagProgress} />
 
         {timeSeriesData.length > 0 && (
           <TimeSeriesChart timeSeriesData={timeSeriesData} dataLength={dataLength} />
