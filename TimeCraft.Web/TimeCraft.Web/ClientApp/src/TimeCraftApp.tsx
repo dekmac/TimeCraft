@@ -16,7 +16,9 @@ export const TimeCraftApp: React.FC = () => {
     tags,
     tagProgress,
     error,
-    generateTimeSeries
+    generateTimeSeries,
+    clearAll,
+    retryTag
   } = useTimeCraft();
 
   return (
@@ -31,6 +33,8 @@ export const TimeCraftApp: React.FC = () => {
           setDataLength={setDataLength}
           isLoading={isLoading}
           onGenerate={generateTimeSeries}
+          onClearAll={clearAll}
+          hasExistingData={tags.length > 0}
         />
 
         <ErrorDisplay error={error} />
@@ -38,7 +42,8 @@ export const TimeCraftApp: React.FC = () => {
         <TagsDisplay 
           tags={tags} 
           tagProgress={tagProgress} 
-          dataLength={dataLength} 
+          dataLength={dataLength}
+          onRetryTag={retryTag}
         />
       </div>
     </div>

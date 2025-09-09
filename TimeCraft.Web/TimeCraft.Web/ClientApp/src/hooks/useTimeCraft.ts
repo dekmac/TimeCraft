@@ -25,23 +25,25 @@ export const useTimeCraft = () => {
 
     setIsLoading(true);
     setError(null);
+
+    // Smart behavior: if we have existing tags, be additive; otherwise start fresh
+    const isAdditive = tags.length > 0;
+    
+    if (!isAdditive) {
+      // Fresh start - clear everything
+      setTags([]);
+      setTagProgress([]);
+      setTimeSeriesData([]);
+    }
+
+    await generateTagsAndTimeSeries(isAdditive);
+  };
+
+  const clearAll = () => {
     setTags([]);
     setTagProgress([]);
     setTimeSeriesData([]);
-
-    await generateTagsAndTimeSeries();
-  };
-
-  const generateAdditionalTags = async () => {
-    if (!description.trim()) {
-      setError('Please enter a description');
-      return;
-    }
-
-    setIsLoading(true);
     setError(null);
-
-    await generateTagsAndTimeSeries(true); // additive mode
   };
 
   const retryTag = async (tagIndex: number) => {
@@ -215,7 +217,7 @@ export const useTimeCraft = () => {
     timeSeriesData,
     error,
     generateTimeSeries,
-    generateAdditionalTags,
+    clearAll,
     retryTag
   };
 };
