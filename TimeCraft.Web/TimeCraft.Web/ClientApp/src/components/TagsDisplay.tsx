@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MiniTimeSeriesChart } from './MiniTimeSeriesChart';
 import { AnomalyControls } from './AnomalyControls';
+import { PublishModal } from './PublishModal';
+import { PublishDatasetModal } from './PublishDatasetModal';
 import { useAnomaly } from '../hooks/useAnomaly';
-import type { GeneratedTag, TagProgress, TagProgressStatus } from '../types/api';
+import { timeCraftApi } from '../services/timeCraftApi';
+import type { GeneratedTag, TagProgress, TagProgressStatus, TimeSeriesData, EventHubConfig, TimeSeriesDataPoint } from '../types/api';
 
 interface TagsDisplayProps {
   tags: GeneratedTag[];
@@ -70,6 +73,15 @@ const getStatusColor = (status: TagProgressStatus) => {
 };
 
 export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dataLength, onRetryTag, onUpdateTagData }) => {
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [datasetModalOpen, setDatasetModalOpen] = useState(false);
+  const [selectedTagForPublish, setSelectedTagForPublish] = useState<{index: number; tag: GeneratedTag; data: TimeSeriesData} | null>(null);
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [datasetPublishError, setDatasetPublishError] = useState<string | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
+  const [datasetPublishSuccess, setDatasetPublishSuccess] = useState<string | null>(null);
+
   const {
     isGeneratingAnomaly,
     anomalyError,
@@ -83,6 +95,80 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dat
   if (tags.length === 0) {
     return null;
   }
+
+  const handlePublishClick = (tagIndex: number, tag: GeneratedTag, progress: TagProgress) => {
+    if (progress?.timeSeriesData) {
+      setSelectedTagForPublish({
+        index: tagIndex,
+        tag,
+        data: progress.timeSeriesData
+      });
+      setPublishModalOpen(true);
+      setPublishError(null);
+      setPublishSuccess(null);
+    }
+  };
+
+  const handlePublish = async (eventHubConfig: EventHubConfig, datasetName: string, description: string) => {
+    if (!selectedTagForPublish) return;
+
+    setPublishLoading(true);
+    setPublishError(null);
+
+    try {
+      // Convert TimeSeriesData to TimeSeriesDataPoint format
+      const timeSeriesData: TimeSeriesDataPoint[] = selectedTagForPublish.data.data.map((value, index) => ({
+        value,
+        time: selectedTagForPublish.data.timestamps?.[index] || index.toString()
+      }));
+
+      const publishRequest = {
+        datasetName,
+        description: description || `Time series data for ${selectedTagForPublish.tag.tag}`,
+        timeSeriesData,
+        eventHubConfig,
+        metadata: {
+          tagName: selectedTagForPublish.tag.tag,
+          tagDescription: selectedTagForPublish.tag.description,
+          originalDataLength: selectedTagForPublish.data.data.length.toString()
+        }
+      };
+
+      const response = await timeCraftApi.publishTimeSeries(publishRequest);
+      
+      setPublishSuccess(`Dataset "${datasetName}" has been queued for publishing. Publish ID: ${response.publishId}`);
+      setPublishModalOpen(false);
+      setSelectedTagForPublish(null);
+
+    } catch (error) {
+      console.error('Error publishing time series:', error);
+      setPublishError(error instanceof Error ? error.message : 'Failed to publish time series');
+    } finally {
+      setPublishLoading(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setPublishModalOpen(false);
+    setSelectedTagForPublish(null);
+    setPublishError(null);
+  };
+
+  const handleDatasetPublishClick = () => {
+    setDatasetModalOpen(true);
+    setDatasetPublishError(null);
+    setDatasetPublishSuccess(null);
+  };
+
+  const handleDatasetPublishSuccess = (publishId: string) => {
+    setDatasetPublishSuccess(`Dataset has been queued for publishing. Publish ID: ${publishId}`);
+    setDatasetModalOpen(false);
+  };
+
+  const handleCloseDatasetModal = () => {
+    setDatasetModalOpen(false);
+    setDatasetPublishError(null);
+  };
 
   const handleGenerateAnomaly = async (
     tagIndex: number,
@@ -112,7 +198,50 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dat
 
   return (
     <div className="glass-effect p-6 mb-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Generated Tags</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-800">Generated Tags</h3>
+        
+        {/* Publish All Tags as Dataset Button */}
+        {tags.some((_, index) => tagProgress?.[index]?.status === 'complete') && (
+          <button
+            onClick={handleDatasetPublishClick}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors duration-200 flex items-center"
+          >
+            📦 Publish All as Dataset
+          </button>
+        )}
+      </div>
+
+      {/* Dataset Publish Success Message */}
+      {datasetPublishSuccess && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+          <div className="flex items-center justify-between">
+            <span>{datasetPublishSuccess}</span>
+            <button
+              onClick={() => setDatasetPublishSuccess(null)}
+              className="text-green-400 hover:text-green-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dataset Publish Error Display */}
+      {datasetPublishError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+          <div className="flex items-center justify-between">
+            <span>{datasetPublishError}</span>
+            <button
+              onClick={() => setDatasetPublishError(null)}
+              className="text-red-400 hover:text-red-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {tags.map((tag, index) => {
           const progress = tagProgress?.[index];
@@ -170,6 +299,58 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dat
                 </div>
               )}
 
+              {/* Publish Button - only show for completed tags */}
+              {status === 'complete' && progress?.timeSeriesData && (
+                <div className="mb-3">
+                  <button
+                    onClick={() => handlePublishClick(index, tag, progress)}
+                    disabled={publishLoading}
+                    className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  >
+                    {publishLoading && selectedTagForPublish?.index === index ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Publishing...
+                      </>
+                    ) : (
+                      <>
+                        📤 Publish to Event Hub
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {publishSuccess && (
+                <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+                  <div className="flex items-center justify-between">
+                    <span>{publishSuccess}</span>
+                    <button
+                      onClick={() => setPublishSuccess(null)}
+                      className="text-green-400 hover:text-green-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Publish Error Display */}
+              {publishError && (
+                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                  <div className="flex items-center justify-between">
+                    <span>{publishError}</span>
+                    <button
+                      onClick={() => setPublishError(null)}
+                      className="text-red-400 hover:text-red-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Error Display */}
               {anomalyError && (
                 <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
@@ -210,6 +391,24 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dat
           );
         })}
       </div>
+      
+      {/* Publish Modal */}
+      <PublishModal
+        isOpen={publishModalOpen}
+        onClose={handleCloseModal}
+        onPublish={handlePublish}
+        timeSeriesData={selectedTagForPublish?.data || null}
+        isLoading={publishLoading}
+      />
+
+      {/* Dataset Publish Modal */}
+      <PublishDatasetModal
+        isOpen={datasetModalOpen}
+        onClose={handleCloseDatasetModal}
+        tags={tagProgress || []}
+        dataLength={dataLength}
+        onPublishSuccess={handleDatasetPublishSuccess}
+      />
     </div>
   );
 };

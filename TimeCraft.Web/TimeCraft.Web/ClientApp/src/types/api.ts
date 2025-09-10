@@ -76,3 +76,92 @@ export interface InjectionPoint {
     index: number;
     selected: boolean;
 }
+
+// Publishing types
+export interface EventHubConfig {
+    eventHubName: string;
+    namespaceName: string;
+    connectionString?: string;
+    useManagedIdentity: boolean;
+    partitionKey?: string;
+    additionalProperties?: Record<string, string>;
+}
+
+export interface OpcUaSettings {
+    namespaceUri: string;
+    namespaceIndex: number;
+    useDataSetWriterId: boolean;
+    publishingInterval: number;
+    enableDeltaFrames: boolean;
+    applicationName: string;
+    applicationUri: string;
+    customProperties?: Record<string, string>;
+}
+
+export interface DatasetTag {
+    tagName: string;
+    description: string;
+    timeSeriesData: TimeSeriesDataPoint[];
+    dataType: string;
+    unit?: string;
+    metadata?: Record<string, string>;
+}
+
+export interface TimeSeriesDataPoint {
+    time?: string;
+    value: number;
+}
+
+export interface PublishDatasetRequest {
+    datasetName: string;
+    description: string;
+    tags: DatasetTag[];
+    eventHubConfig: EventHubConfig;
+    opcUaSettings: OpcUaSettings;
+    metadata?: Record<string, string>;
+}
+
+export interface PublishTimeSeriesRequest {
+    datasetName: string;
+    description: string;
+    timeSeriesData: TimeSeriesDataPoint[];
+    eventHubConfig: EventHubConfig;
+    metadata?: Record<string, string>;
+}
+
+export interface PublishTimeSeriesResponse {
+    publishId: string;
+    message: string;
+    status: PublishingStatus;
+    createdAt: string;
+}
+
+export type PublishingStatus = 'Pending' | 'InProgress' | 'Completed' | 'Failed' | 'Retrying';
+
+export interface PublishedDataset {
+    id: string;
+    datasetName: string;
+    description: string;
+    status: PublishingStatus;
+    createdAt: string;
+    publishedAt?: string;
+    eventHubName: string;
+    namespaceName: string;
+    totalDataPoints: number;
+    publishedDataPoints: number;
+    errorMessage?: string;
+    retryCount: number;
+    progressPercentage: number;
+}
+
+export interface PublishingStatusInfo {
+    id: string;
+    status: string;
+    progressPercentage: number;
+    publishedDataPoints: number;
+    totalDataPoints: number;
+    errorMessage?: string;
+    retryCount: number;
+    createdAt: string;
+    publishedAt?: string;
+}

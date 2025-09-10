@@ -1,5 +1,8 @@
 
 using TimeCraft.Web.Services;
+using TimeCraft.Web.Services.Interfaces;
+using TimeCraft.Web.Services.Implementations;
+using TimeCraft.Web.Settings;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +11,18 @@ builder.Services.AddControllersWithViews();
 
 // Add HTTP client for Python API communication
 builder.Services.AddHttpClient<IPythonApiService, PythonApiService>();
+
+// Configure settings
+builder.Services.Configure<PublishingSettings>(
+    builder.Configuration.GetSection("Publishing"));
+
+// Add publishing services
+builder.Services.AddScoped<IPublishingService, PublishingService>();
+builder.Services.AddScoped<IEventHubPublisher, EventHubPublisher>();
+builder.Services.AddScoped<IOpcUaDeltaFramePublisher, OpcUaDeltaFramePublisher>();
+
+// Add background service for publishing
+builder.Services.AddHostedService<PublishingBackgroundService>();
 
 var app = builder.Build();
 

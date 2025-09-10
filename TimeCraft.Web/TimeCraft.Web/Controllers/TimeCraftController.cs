@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using TimeCraft.Web.Models;
+using TimeCraft.Web.Models.Publishing;
 using TimeCraft.Web.Services;
+using TimeCraft.Web.Services.Interfaces;
 
 namespace TimeCraft.Web.Controllers;
 
@@ -9,11 +11,16 @@ namespace TimeCraft.Web.Controllers;
 public class TimeCraftController : ControllerBase
 {
     private readonly IPythonApiService _pythonApiService;
+    private readonly IPublishingService _publishingService;
     private readonly ILogger<TimeCraftController> _logger;
 
-    public TimeCraftController(IPythonApiService pythonApiService, ILogger<TimeCraftController> logger)
+    public TimeCraftController(
+        IPythonApiService pythonApiService, 
+        IPublishingService publishingService,
+        ILogger<TimeCraftController> logger)
     {
         _pythonApiService = pythonApiService;
+        _publishingService = publishingService;
         _logger = logger;
     }
 
@@ -168,6 +175,65 @@ public class TimeCraftController : ControllerBase
         {
             _logger.LogError(ex, "Error generating anomaly for tag: {TagName}", request?.TagName);
             return StatusCode(500, "An error occurred while generating anomaly data");
+        }
+    }
+
+    [HttpPost("publish-dataset")]
+    public async Task<ActionResult<PublishTimeSeriesResponse>> PublishDataset([FromBody] PublishDatasetRequest request)
+    {
+        _logger.LogInformation("=== PublishDataset method called ===");
+        
+        try
+        {
+            if (request == null)
+            {
+                _logger.LogWarning("Request object is null");
+                return BadRequest("Request is required");
+            }
+
+            if (!ModelState.IsValid)
+            {
+                _logger.LogWarning("Invalid model state for dataset publish request");
+                return BadRequest(ModelState);
+            }
+
+            if (request.Tags == null || !request.Tags.Any())
+            {
+                _logger.LogWarning("No tags provided for dataset publishing");
+                return BadRequest("At least one tag is required for dataset publishing");
+            }
+
+            // Create publish record
+            var publishRecord = new PublishRecord
+            {
+                DatasetName = request.DatasetName,
+                Description = request.Description,
+                Tags = request.Tags,
+                EventHubConfig = request.EventHubConfig,
+                OpcUaSettings = request.OpcUaSettings,
+                Metadata = request.Metadata,
+                TotalDataPoints = request.Tags.Sum(tag => tag.TimeSeriesData.Count)
+            };
+
+            // Store the publish record
+            var publishId = await _publishingService.CreatePublishRecordAsync(publishRecord);
+
+            _logger.LogInformation("Created publish record {PublishId} for dataset {DatasetName} with {TagCount} tags and {DataPointCount} total data points", 
+                publishId, request.DatasetName, request.Tags.Count, publishRecord.TotalDataPoints);
+
+            var response = new PublishTimeSeriesResponse
+            {
+                PublishId = publishId,
+                Message = $"Dataset publish request created successfully. Publishing {request.Tags.Count} tags with OPC UA Delta frames will begin in the background.",
+                Status = PublishingStatus.Pending
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating dataset publish request for {DatasetName}", request?.DatasetName);
+            return StatusCode(500, "An error occurred while creating the dataset publish request");
         }
     }
 }
