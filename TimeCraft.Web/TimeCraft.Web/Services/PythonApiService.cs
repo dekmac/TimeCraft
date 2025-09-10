@@ -21,8 +21,8 @@ public class PythonApiService : IPythonApiService
         _pythonApiBaseUrl =
             configuration.GetValue<string>("PythonApi:BaseUrl") ?? "http://localhost:8080";
 
-        // Set longer timeout for Azure OpenAI API calls which can take time
-        _httpClient.Timeout = TimeSpan.FromMinutes(2);
+        // Set longer timeout for Azure OpenAI API calls with reflection which can take time
+        _httpClient.Timeout = TimeSpan.FromMinutes(5); // 5 minutes for reflection operations
     }
 
     public async Task<GenerateTagsResponse> GenerateTagsAsync(GenerateTagsRequest request)

@@ -12,7 +12,7 @@ class TimeCraftApiService {
   constructor() {
     this.api = axios.create({
       baseURL: '/api',
-      timeout: 30000,
+      timeout: 180000, // 3 minutes to accommodate reflection operations
       headers: {
         'Content-Type': 'application/json',
       },

@@ -2,10 +2,13 @@
 Time series generation endpoints for TimeCraft API.
 """
 
+import math
 import os
+import random
 import re
+import time
 import traceback
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi.responses import JSONResponse
 from .models import (
     TextToTimeSeriesRequest, DomainPromptGenerationRequest, 
@@ -27,8 +30,11 @@ class FallbackChatLLM:
     def __init__(self, model_name="gpt-3.5-turbo", temperature=0.1):
         self.model_name = model_name
         self.temperature = temperature
+        self.timeout = 120  # Increased timeout to 120 seconds for reflection operations
+        self.max_retries = 3  # Maximum retries for API calls
         self.has_openai = self._check_openai_availability()
         print(f"FallbackChatLLM initialized. OpenAI available: {self.has_openai}")
+        print(f"Timeout set to {self.timeout}s, max retries: {self.max_retries}")
     
     def _check_openai_availability(self):
         """Check if OpenAI is available and properly configured."""
@@ -43,100 +49,115 @@ class FallbackChatLLM:
             return False
     
     def generate(self, prompt):
-        """Generate method that mimics the BRIDGE ChatLLM interface."""
+        """Generate method that mimics the BRIDGE ChatLLM interface with timeout and retry logic."""
         print(f"🔍 FallbackChatLLM.generate() called with model: {self.model_name}")
         print(f"🔍 Environment check:")
         print(f"   OPENAI_API_KEY: {'SET' if os.environ.get('OPENAI_API_KEY') else 'NOT SET'}")
         print(f"   OPENAI_API_BASE: {os.environ.get('OPENAI_API_BASE', 'NOT SET')}")
         print(f"   OPENAI_DEPLOYMENT_NAME: {os.environ.get('OPENAI_DEPLOYMENT_NAME', 'NOT SET')}")
         print(f"   OPENAI_API_VERSION: {os.environ.get('OPENAI_API_VERSION', 'NOT SET')}")
+        print(f"   Timeout: {self.timeout}s, Max retries: {self.max_retries}")
         
-        # Try to use the actual API first
-        try:
-            from openai import AzureOpenAI
-            print(f"✅ OpenAI library imported successfully (v1 syntax)")
-            
-            # Configure for Azure OpenAI - use explicit endpoint and deployment
-            if os.environ.get('OPENAI_API_KEY'):
-                print(f"🔄 Configuring Azure OpenAI...")
-                
-                api_base = os.environ.get('OPENAI_API_BASE', 'https://oai-shared-02.openai.azure.com/')
-                api_version = os.environ.get('OPENAI_API_VERSION', '2023-05-15')
-                api_key = os.environ.get('OPENAI_API_KEY')
-                
-                print(f"✅ Azure OpenAI configured:")
-                print(f"   api_base: {api_base}")
-                print(f"   api_version: {api_version}")
-                print(f"   model_name: {self.model_name}")
-                
-                # When using Azure OpenAI, we use the deployment name
-                deployment = os.environ.get('OPENAI_DEPLOYMENT_NAME', 'gpt-4o')
-                print(f"   deployment: {deployment}")
-                
-                # Create Azure OpenAI client
-                client = AzureOpenAI(
-                    azure_endpoint=api_base,
-                    api_key=api_key,
-                    api_version=api_version
-                )
-                
-                print(f"🚀 Making Azure OpenAI API call...")
-                # Create completion using new v1 syntax
-                response = client.chat.completions.create(
-                    model=deployment,  # Use deployment name as model
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant that returns only the requested data without explanation."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=self.temperature
-                )
-                
-                print(f"✅ Azure OpenAI API call successful!")
-                # Extract text response
-                result = response.choices[0].message.content
-                print(f"📝 Response: {result[:100]}...")
-                return result
-            else:
-                print(f"❌ OPENAI_API_KEY not found in environment")
-                
-        except Exception as e:
-            print(f"❌ Azure OpenAI API call failed: {e}")
-            print(f"   Exception type: {type(e).__name__}")
-            print(f"   Full traceback:")
-            import traceback
-            traceback.print_exc()
-            
-            # Try regular OpenAI as fallback
+        # Try to use the actual API first with retry logic
+        for attempt in range(self.max_retries):
             try:
-                print(f"🔄 Trying regular OpenAI as fallback...")
-                from openai import OpenAI
+                print(f"🔄 API attempt {attempt + 1}/{self.max_retries}")
+                from openai import AzureOpenAI
+                print(f"✅ OpenAI library imported successfully (v1 syntax)")
                 
-                # Check for regular OpenAI key in environment
-                regular_openai_key = os.environ.get('OPENAI_API_KEY_REGULAR') or os.environ.get('OPENAI_KEY')
-                if regular_openai_key:
-                    print(f"✅ Regular OpenAI key found, attempting connection...")
+                # Configure for Azure OpenAI - use explicit endpoint and deployment
+                if os.environ.get('OPENAI_API_KEY'):
+                    print(f"🔄 Configuring Azure OpenAI...")
                     
-                    client = OpenAI(api_key=regular_openai_key)
-                    response = client.chat.completions.create(
-                        model="gpt-4o" if "gpt-4" in self.model_name else "gpt-3.5-turbo",
-                        messages=[
-                            {"role": "system", "content": "You are a helpful assistant that generates realistic time series data and sensor tags for industrial monitoring applications."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=self.temperature
+                    api_base = os.environ.get('OPENAI_API_BASE', 'https://oai-shared-02.openai.azure.com/')
+                    api_version = os.environ.get('OPENAI_API_VERSION', '2023-05-15')
+                    api_key = os.environ.get('OPENAI_API_KEY')
+                    
+                    print(f"✅ Azure OpenAI configured:")
+                    print(f"   api_base: {api_base}")
+                    print(f"   api_version: {api_version}")
+                    print(f"   model_name: {self.model_name}")
+                    
+                    # When using Azure OpenAI, we use the deployment name
+                    deployment = os.environ.get('OPENAI_DEPLOYMENT_NAME', 'gpt-4o')
+                    print(f"   deployment: {deployment}")
+                    
+                    # Create Azure OpenAI client with timeout
+                    client = AzureOpenAI(
+                        azure_endpoint=api_base,
+                        api_key=api_key,
+                        api_version=api_version,
+                        timeout=self.timeout
                     )
                     
+                    print(f"🚀 Making Azure OpenAI API call (timeout: {self.timeout}s)...")
+                    # Create completion using new v1 syntax
+                    response = client.chat.completions.create(
+                        model=deployment,  # Use deployment name as model
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant that returns only the requested data without explanation."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=self.temperature,
+                        timeout=self.timeout
+                    )
+                    
+                    print(f"✅ Azure OpenAI API call successful!")
+                    # Extract text response
                     result = response.choices[0].message.content
-                    print(f"✅ Regular OpenAI API call successful!")
                     print(f"📝 Response: {result[:100]}...")
                     return result
                 else:
-                    print(f"❌ No regular OpenAI key found (OPENAI_API_KEY_REGULAR or OPENAI_KEY)")
+                    print(f"❌ OPENAI_API_KEY not found in environment")
+                    break  # No point retrying if no API key
                     
-            except Exception as openai_error:
-                print(f"❌ Regular OpenAI also failed: {openai_error}")
-            
-            print("🔄 Falling back to mock responses")
+            except Exception as e:
+                print(f"❌ Azure OpenAI API call failed (attempt {attempt + 1}): {e}")
+                print(f"   Exception type: {type(e).__name__}")
+                
+                if attempt < self.max_retries - 1:
+                    wait_time = (attempt + 1) * 2  # Exponential backoff
+                    print(f"⏳ Waiting {wait_time}s before retry...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print(f"   Full traceback:")
+                    import traceback
+                    traceback.print_exc()
+                    
+                    # Try regular OpenAI as final fallback
+                    try:
+                        print(f"🔄 Trying regular OpenAI as final fallback...")
+                        from openai import OpenAI
+                        
+                        # Check for regular OpenAI key in environment
+                        regular_openai_key = os.environ.get('OPENAI_API_KEY_REGULAR') or os.environ.get('OPENAI_KEY')
+                        if regular_openai_key:
+                            print(f"✅ Regular OpenAI key found, attempting connection...")
+                            
+                            client = OpenAI(api_key=regular_openai_key, timeout=self.timeout)
+                            response = client.chat.completions.create(
+                                model="gpt-4o" if "gpt-4" in self.model_name else "gpt-3.5-turbo",
+                                messages=[
+                                    {"role": "system", "content": "You are a helpful assistant that generates realistic time series data and sensor tags for industrial monitoring applications."},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                temperature=self.temperature,
+                                timeout=self.timeout
+                            )
+                            
+                            result = response.choices[0].message.content
+                            print(f"✅ Regular OpenAI API call successful!")
+                            print(f"📝 Response: {result[:100]}...")
+                            return result
+                        else:
+                            print(f"❌ No regular OpenAI key found (OPENAI_API_KEY_REGULAR or OPENAI_KEY)")
+                            
+                    except Exception as openai_error:
+                        print(f"❌ Regular OpenAI also failed: {openai_error}")
+                    
+                    print("🔄 Falling back to mock responses")
+                    break
         
         # Fall back to domain-aware mock responses if API call fails
         print("⚠️  FallbackChatLLM: Using domain-aware mock responses")
@@ -357,6 +378,265 @@ class FallbackChatLLM:
         return ", ".join(map(str, values))
 
 
+def create_tag_reflection_prompt(original_description: str, generated_tags: List[str], 
+                                num_tags: int) -> str:
+    """Create a prompt for the LLM to reflect on and assess its tag generation."""
+    tags_str = ", ".join(generated_tags)
+    
+    return f"""You are an expert in industrial monitoring systems. Please assess the quality of these generated sensor tag names.
+
+ORIGINAL REQUEST: Generate {num_tags} realistic sensor tag names for: "{original_description}"
+
+GENERATED TAGS: {tags_str}
+
+ASSESSMENT CRITERIA:
+1. RELEVANCE: Do the tags match the industrial domain described?
+2. REALISM: Are these actual sensor types used in this industry?
+3. NAMING CONVENTION: Do they follow proper industrial tag naming?
+4. QUANTITY: Are there exactly {num_tags} tags?
+5. DIVERSITY: Do they represent different measurement types?
+6. SPECIFICITY: Are they specific to the described scenario?
+
+ASSESSMENT:
+- Rate each criterion (1-10): Relevance, Realism, Naming, Quantity, Diversity, Specificity
+- Overall Quality Score (1-10):
+- Issues Found: [List any problems]
+- Improvements Needed: [Specific suggestions]
+
+Is this output ACCEPTABLE (YES/NO)? If NO, provide better tag names.
+
+FORMAT:
+RELEVANCE: [score]/10
+REALISM: [score]/10 
+NAMING: [score]/10
+QUANTITY: [score]/10
+DIVERSITY: [score]/10
+SPECIFICITY: [score]/10
+OVERALL: [score]/10
+ISSUES: [list issues]
+IMPROVEMENTS: [suggestions]
+ACCEPTABLE: YES/NO
+BETTER_TAGS: [only if NO - provide improved tags]"""
+
+
+def create_timeseries_reflection_prompt(tag_name: str, description: str, 
+                                       generated_values: List[float], 
+                                       sequence_length: int) -> str:
+    """Create a prompt for the LLM to reflect on timeseries generation quality."""
+    values_preview = ", ".join([f"{v:.3f}" for v in generated_values[:10]])
+    if len(generated_values) > 10:
+        values_preview += f"... (showing first 10 of {len(generated_values)} values)"
+    
+    stats = {
+        'min': min(generated_values),
+        'max': max(generated_values),
+        'avg': sum(generated_values) / len(generated_values),
+        'range': max(generated_values) - min(generated_values)
+    }
+    
+    return f"""You are an expert in industrial sensor data and time series analysis. Assess the quality of this generated sensor data.
+
+SENSOR TAG: {tag_name}
+SYSTEM DESCRIPTION: {description}
+REQUESTED LENGTH: {sequence_length}
+GENERATED LENGTH: {len(generated_values)}
+
+GENERATED DATA PREVIEW: {values_preview}
+
+STATISTICS:
+- Min: {stats['min']:.3f}
+- Max: {stats['max']:.3f}  
+- Average: {stats['avg']:.3f}
+- Range: {stats['range']:.3f}
+
+ASSESSMENT CRITERIA:
+1. REALISM: Are values realistic for this sensor type?
+2. VARIABILITY: Does data show appropriate variation/noise?
+3. PATTERNS: Are there realistic temporal patterns?
+4. SCALE: Are the value ranges appropriate?
+5. COMPLETENESS: Is the data length correct?
+6. PHYSICS: Does the data follow physical constraints?
+
+ASSESSMENT:
+- Rate each criterion (1-10): Realism, Variability, Patterns, Scale, Completeness, Physics
+- Overall Quality Score (1-10):
+- Issues Found: [List problems with the data]
+- Physics Violations: [Any unrealistic values or patterns]
+
+Is this data ACCEPTABLE (YES/NO)? 
+
+FORMAT:
+REALISM: [score]/10
+VARIABILITY: [score]/10
+PATTERNS: [score]/10
+SCALE: [score]/10
+COMPLETENESS: [score]/10
+PHYSICS: [score]/10
+OVERALL: [score]/10
+ISSUES: [list issues]
+VIOLATIONS: [physics problems]
+ACCEPTABLE: YES/NO"""
+
+
+def reflect_on_tag_generation(description: str, generated_tags: List[str], 
+                             num_tags: int, chat_llm, 
+                             max_retries: int = 2) -> Tuple[List[str], bool]:
+    """
+    Use LLM self-reflection to assess and potentially improve tag generation.
+    Returns (final_tags, was_improved)
+    """
+    current_tags = generated_tags.copy()
+    
+    for attempt in range(max_retries + 1):
+        print(f"🔍 Tag reflection attempt {attempt + 1}/{max_retries + 1}")
+        
+        if attempt > 0:
+            # Add delay between reflection attempts to prevent rate limiting
+            print("⏳ Waiting 5s between reflection attempts...")
+            time.sleep(5)
+        
+        try:
+            # Create reflection prompt
+            reflection_prompt = create_tag_reflection_prompt(
+                description, current_tags, num_tags
+            )
+            
+            # Get reflection assessment
+            print("🤔 Asking LLM to reflect on tag quality...")
+            reflection_response = chat_llm.generate(reflection_prompt)
+            print(f"📝 Reflection: {reflection_response[:200]}...")
+            
+            # Parse reflection response
+            if "ACCEPTABLE: NO" in reflection_response.upper():
+                print("❌ LLM says tags need improvement")
+                
+                # Look for better tags in the response
+                if "BETTER_TAGS:" in reflection_response.upper():
+                    lines = reflection_response.split('\n')
+                    for line in lines:
+                        if 'BETTER_TAGS:' in line.upper():
+                            better_tags_str = line.split(':', 1)[1].strip()
+                            improved_tags = [tag.strip() 
+                                           for tag in better_tags_str.split(',') 
+                                           if tag.strip()]
+                            
+                            if len(improved_tags) >= num_tags:
+                                current_tags = improved_tags[:num_tags]
+                                print(f"✅ Using improved tags: {current_tags}")
+                                continue
+                            else:
+                                print(f"⚠️ Improved tags insufficient: {len(improved_tags)} < {num_tags}")
+                                break
+                
+                # If no better tags provided, regenerate
+                print("🔄 Regenerating tags with more specific prompt...")
+                regeneration_prompt = f"""Based on the reflection feedback, generate exactly {num_tags} BETTER sensor tag names for: "{description}"
+
+Previous tags had issues. Generate improved tags that are:
+1. More specific to the described industry/domain
+2. Follow proper industrial naming conventions  
+3. Represent diverse sensor types needed for this scenario
+4. Use realistic equipment/location identifiers
+
+Return only the {num_tags} tag names separated by commas, no other text."""
+                
+                regenerated_response = chat_llm.generate(regeneration_prompt)
+                regenerated_tags = parse_tag_names_response(regenerated_response, num_tags)
+                current_tags = regenerated_tags
+                print(f"🔄 Regenerated tags: {current_tags}")
+                
+            else:
+                print("✅ LLM says tags are acceptable")
+                was_improved = (attempt > 0)
+                return current_tags, was_improved
+                
+        except Exception as e:
+            print(f"❌ Reflection attempt {attempt + 1} failed: {e}")
+            if attempt == max_retries:
+                print("⚠️ Max reflection attempts reached, using current tags")
+                return current_tags, False
+            continue
+    
+    # If we've exhausted retries, return current tags
+    return current_tags, (len(current_tags) != len(generated_tags) or 
+                         current_tags != generated_tags)
+
+
+def reflect_on_timeseries_generation(tag_name: str, description: str, 
+                                   generated_values: List[float], 
+                                   sequence_length: int, tag_index: int,
+                                   chat_llm, max_retries: int = 2) -> Tuple[List[float], bool]:
+    """
+    Use LLM self-reflection to assess and potentially improve timeseries generation.
+    Returns (final_values, was_improved)
+    """
+    current_values = generated_values.copy()
+    
+    for attempt in range(max_retries + 1):
+        print(f"🔍 Timeseries reflection attempt {attempt + 1}/{max_retries + 1} for {tag_name}")
+        
+        if attempt > 0:
+            # Add delay between reflection attempts to prevent rate limiting
+            print("⏳ Waiting 5s between reflection attempts...")
+            time.sleep(5)
+        
+        try:
+            # Create reflection prompt
+            reflection_prompt = create_timeseries_reflection_prompt(
+                tag_name, description, current_values, sequence_length
+            )
+            
+            # Get reflection assessment
+            print(f"🤔 Asking LLM to reflect on timeseries quality for {tag_name}...")
+            reflection_response = chat_llm.generate(reflection_prompt)
+            print(f"📝 Reflection: {reflection_response[:150]}...")
+            
+            # Parse reflection response
+            if "ACCEPTABLE: NO" in reflection_response.upper():
+                print(f"❌ LLM says timeseries for {tag_name} needs improvement")
+                
+                # Regenerate with more specific guidance
+                print(f"🔄 Regenerating timeseries for {tag_name} with reflection feedback...")
+                
+                improvement_prompt = f"""Based on reflection feedback, generate IMPROVED time series data for:
+
+SENSOR TAG: {tag_name}
+SYSTEM: {description}
+LENGTH: {sequence_length} values
+
+The previous data had quality issues. Generate better data that:
+1. Has realistic values for this sensor type and application
+2. Shows appropriate variability and noise levels
+3. Follows physical constraints and engineering reality
+4. Has proper temporal patterns for this industrial scenario
+5. Uses appropriate measurement scales and ranges
+
+Return exactly {sequence_length} comma-separated numerical values, no other text."""
+                
+                regenerated_response = chat_llm.generate(improvement_prompt)
+                regenerated_values = parse_timeseries_response(
+                    regenerated_response, tag_name, sequence_length, tag_index
+                )
+                current_values = regenerated_values
+                print(f"🔄 Regenerated {len(current_values)} values for {tag_name}")
+                
+            else:
+                print(f"✅ LLM says timeseries for {tag_name} is acceptable")
+                was_improved = (attempt > 0)
+                return current_values, was_improved
+                
+        except Exception as e:
+            print(f"❌ Reflection attempt {attempt + 1} failed for {tag_name}: {e}")
+            if attempt == max_retries:
+                print(f"⚠️ Max reflection attempts reached for {tag_name}, using current values")
+                return current_values, False
+            continue
+    
+    # If we've exhausted retries, return current values
+    return current_values, (len(current_values) != len(generated_values) or 
+                           current_values != generated_values)
+
+
 def create_tag_generation_prompt(description: str, num_tags: int) -> str:
     """Create a sophisticated prompt for realistic domain-specific tag generation."""
     return f"""You are an expert in industrial monitoring and sensor systems. Generate {num_tags} realistic sensor tag names for the following monitoring scenario.
@@ -430,18 +710,35 @@ def parse_tag_names_response(response: str, num_tags: int) -> List[str]:
 
 
 def generate_tag_names_with_llm(description: str, num_tags: int, chat_llm) -> List[str]:
-    """Generate tag names using LLM."""
+    """Generate tag names using LLM with self-reflection for quality assurance."""
     try:
         prompt = create_tag_generation_prompt(description, num_tags)
         print(f"Generating tag names with prompt: '{prompt[:50]}...'")
+        
+        # Initial generation
         response = chat_llm.generate(prompt)
         print(f"LLM tag name response: '{response[:50]}...'")
-        return parse_tag_names_response(response, num_tags)
+        initial_tags = parse_tag_names_response(response, num_tags)
+        print(f"Initial tags: {initial_tags}")
+        
+        # Self-reflection step
+        print("🔍 Starting tag generation self-reflection...")
+        final_tags, was_improved = reflect_on_tag_generation(
+            description, initial_tags, num_tags, chat_llm, max_retries=2
+        )
+        
+        if was_improved:
+            print(f"✅ Tags improved through reflection: {final_tags}")
+        else:
+            print(f"✅ Initial tags passed reflection: {final_tags}")
+            
+        return final_tags
+        
     except Exception as e:
         print(f"Error generating tag names with LLM: {e}")
         print("Falling back to keyword-based tag generation")
         # Fallback to keyword-based generation
-        return generate_tag_names_from_description(description, num_tags)
+        return generate_tag_names_from_description(description, num_tags, chat_llm)
 
 
 def create_timeseries_generation_prompt(
@@ -449,19 +746,20 @@ def create_timeseries_generation_prompt(
     description: str,
     sequence_length: int,
     scenario: str = None,
-    time_period: str = None
+    time_period: str = None,
+    chat_llm = None
 ) -> str:
     """
-    Create a sophisticated prompt for realistic structural monitoring timeseries generation.
+    Create a sophisticated prompt for realistic domain-aware timeseries generation.
     """
     # Parse device type from tag name for specialized prompting
-    device_type = detect_device_type_from_tag(tag_name)
-    device_prompt = get_device_specific_prompt(device_type, tag_name)
+    device_info = detect_device_type_from_tag(tag_name)
+    device_prompt = get_device_specific_prompt(device_info, tag_name, chat_llm)
     
     scenario_text = f"\nScenario Context: {scenario}" if scenario else ""
     time_period_text = f"\nTime Period: {time_period}" if time_period else ""
     
-    return f"""You are generating realistic time series data for a structural health monitoring system. 
+    return f"""You are generating realistic time series data for an industrial monitoring system.
 
 SENSOR DETAILS:
 Tag Name: {tag_name}
@@ -475,207 +773,221 @@ DATA GENERATION REQUIREMENTS:
    - Appropriate noise levels and measurement precision
    - Natural drift and baseline variations
    - Occasional data spikes or anomalies (5-10% of readings)
-   - Temperature effects and environmental influences
+   - Environmental influences (temperature, humidity, pressure)
 3. Temporal patterns:
-   - Daily cycles (thermal expansion, traffic patterns)
+   - Industry-appropriate daily/operational cycles
    - Random variations with realistic autocorrelation
-   - Gradual trends (structural aging, settlement)
-   - Event responses (wind gusts, vehicle loads)
+   - Gradual trends (equipment aging, process drift)
+   - Event responses (load changes, environmental factors)
 4. Data quality simulation:
    - 2-3% outliers or measurement errors
-   - Occasional brief periods of elevated activity
+   - Occasional brief periods of elevated/reduced activity
    - Realistic sensor behavior (not perfectly smooth)
 5. Engineering realism:
-   - Values should reflect real-world engineering measurements
+   - Values should reflect real-world industrial measurements
    - Include both positive and negative values where appropriate
-   - Show structural response to environmental conditions
+   - Show process response to operational and environmental conditions
 
 OUTPUT FORMAT:
 Return exactly {sequence_length} comma-separated numerical values representing sequential measurements.
 No additional text, explanations, or formatting - just the raw numerical data."""
 
 
-def detect_device_type_from_tag(tag_name: str) -> str:
-    """Detect device type from tag name for specialized prompting."""
+def detect_device_type_from_tag(tag_name: str) -> dict:
+    """Detect device type and parameters from tag name for specialized prompting."""
     tag_upper = tag_name.upper()
     
-    if any(keyword in tag_upper for keyword in ['ACCEL', 'ACCELEROMETER']):
-        return 'accelerometer'
-    elif any(keyword in tag_upper for keyword in ['VIBRO', 'VIBROMETER']):
-        return 'vibrometer'
-    elif any(keyword in tag_upper for keyword in ['STRAIN', 'SG']):
-        return 'strain_gauge'
-    elif any(keyword in tag_upper for keyword in ['DISP', 'DISPLACEMENT', 'LVDT']):
-        return 'displacement'
-    elif any(keyword in tag_upper for keyword in ['INCLIN', 'TILT']):
-        return 'inclinometer'
-    elif any(keyword in tag_upper for keyword in ['PIEZO', 'PRESS', 'PRESSURE']):
-        return 'piezometer'
-    elif any(keyword in tag_upper for keyword in ['EXTEN', 'SETTLEMENT']):
-        return 'extensometer'
-    elif any(keyword in tag_upper for keyword in ['WEATHER', 'WIND', 'TEMP', 'HUMID']):
-        return 'weather_station'
-    elif any(keyword in tag_upper for keyword in ['CRACK', 'WIDTH']):
-        return 'crack_monitor'
-    elif any(keyword in tag_upper for keyword in ['LOAD', 'FORCE', 'WEIGHT']):
-        return 'load_cell'
+    # Temperature sensors
+    if any(keyword in tag_upper for keyword in ['TEMP', 'TEMPERATURE', 'THERMAL']):
+        return {
+            'type': 'temperature',
+            'measurement': 'temperature',
+            'units': '°C or °F',
+            'typical_range': '-40°C to +150°C',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Pressure sensors
+    elif any(keyword in tag_upper for keyword in ['PRESS', 'PRESSURE', 'VACUUM']):
+        return {
+            'type': 'pressure',
+            'measurement': 'pressure',
+            'units': 'kPa, bar, or psi',
+            'typical_range': '0-1000 kPa',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Flow meters
+    elif any(keyword in tag_upper for keyword in ['FLOW', 'FLOWRATE', 'VOLUMETRIC', 'MASS_FLOW']):
+        return {
+            'type': 'flow',
+            'measurement': 'flow rate',
+            'units': 'L/min, m³/h, or kg/h',
+            'typical_range': '0-1000 L/min',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Level sensors
+    elif any(keyword in tag_upper for keyword in ['LEVEL', 'HEIGHT', 'DEPTH', 'TANK']):
+        return {
+            'type': 'level',
+            'measurement': 'liquid/solid level',
+            'units': 'mm, cm, or %',
+            'typical_range': '0-100%',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Speed/RPM sensors
+    elif any(keyword in tag_upper for keyword in ['SPEED', 'RPM', 'VELOCITY', 'ROTATION']):
+        return {
+            'type': 'speed',
+            'measurement': 'rotational or linear speed',
+            'units': 'RPM, m/s, or Hz',
+            'typical_range': '0-3600 RPM',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Vibration sensors
+    elif any(keyword in tag_upper for keyword in ['VIB', 'VIBRATION', 'ACCEL', 'ACCELEROMETER']):
+        return {
+            'type': 'vibration',
+            'measurement': 'vibration/acceleration',
+            'units': 'm/s², g, or mm/s',
+            'typical_range': '±50g',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Current/Power sensors
+    elif any(keyword in tag_upper for keyword in ['CURRENT', 'AMP', 'POWER', 'WATT', 'VOLTAGE', 'VOLT']):
+        return {
+            'type': 'electrical',
+            'measurement': 'electrical parameter',
+            'units': 'A, V, W, or kW',
+            'typical_range': '0-1000A or 0-500V',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # pH/Chemical sensors
+    elif any(keyword in tag_upper for keyword in ['PH', 'CHEMICAL', 'CONCENTRATION', 'PPM', 'CONDUCTIVITY']):
+        return {
+            'type': 'chemical',
+            'measurement': 'chemical property',
+            'units': 'pH, ppm, or µS/cm',
+            'typical_range': '0-14 pH or 0-1000 ppm',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Humidity sensors
+    elif any(keyword in tag_upper for keyword in ['HUMID', 'HUMIDITY', 'MOISTURE', 'RH']):
+        return {
+            'type': 'humidity',
+            'measurement': 'relative humidity',
+            'units': '% RH',
+            'typical_range': '0-100% RH',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Position/Valve sensors
+    elif any(keyword in tag_upper for keyword in ['POS', 'POSITION', 'VALVE', 'ACTUATOR', 'DISPLACEMENT']):
+        return {
+            'type': 'position',
+            'measurement': 'position/displacement',
+            'units': 'mm, cm, or %',
+            'typical_range': '0-100%',
+            'application': _detect_application_from_tag(tag_upper)
+        }
+    
+    # Generic catch-all
     else:
-        return 'generic_sensor'
+        return {
+            'type': 'generic',
+            'measurement': 'process parameter',
+            'units': 'various',
+            'typical_range': 'application dependent',
+            'application': _detect_application_from_tag(tag_upper)
+        }
 
 
-def get_device_specific_prompt(device_type: str, tag_name: str) -> str:
-    """Generate device-specific prompting for realistic time series generation."""
+def _detect_application_from_tag(tag_upper: str) -> str:
+    """Detect the application domain from tag name."""
+    if any(keyword in tag_upper for keyword in ['PASTEURIZER', 'HOMOGENIZER', 'MILK', 'DAIRY', 'CIP']):
+        return 'dairy_processing'
+    elif any(keyword in tag_upper for keyword in ['REACTOR', 'DISTILLATION', 'CATALYST', 'COLUMN']):
+        return 'chemical_processing'
+    elif any(keyword in tag_upper for keyword in ['CHILLER', 'AHU', 'HVAC', 'DAMPER', 'FAN']):
+        return 'hvac_systems'
+    elif any(keyword in tag_upper for keyword in ['GENERATOR', 'TURBINE', 'TRANSFORMER', 'GRID']):
+        return 'power_generation'
+    elif any(keyword in tag_upper for keyword in ['PUMP', 'FILTER', 'CLARIFIER', 'EFFLUENT']):
+        return 'water_treatment'
+    elif any(keyword in tag_upper for keyword in ['ENGINE', 'BRAKE', 'TRANSMISSION', 'FUEL']):
+        return 'automotive'
+    elif any(keyword in tag_upper for keyword in ['MOTOR', 'CONVEYOR', 'HYDRAULIC', 'PRODUCTION']):
+        return 'manufacturing'
+    elif any(keyword in tag_upper for keyword in ['PIPELINE', 'CRUDE', 'REFINERY', 'COMPRESSOR']):
+        return 'oil_gas'
+    else:
+        return 'general_industrial'
+
+
+def get_device_specific_prompt(device_info: dict, tag_name: str, chat_llm=None) -> str:
+    """Generate device-specific prompting using LLM analysis of the tag name."""
     
-    device_prompts = {
-        'accelerometer': f"""
-DEVICE TYPE: Accelerometer ({tag_name})
-- Typical Range: ±2g to ±50g (19.6 to 490 m/s²)
-- Measurement Units: m/s² or g
-- Frequency Response: 0.1 Hz to 1000+ Hz
-- Noise Floor: 0.001-0.01 m/s² RMS
-- Behavior Characteristics:
-  * Sensitive to vibrations from traffic, wind, machinery
-  * Shows modal responses during excitation events
-  * Background noise from ambient vibrations
-  * Higher activity during daytime (traffic/human activity)
-  * May show temperature sensitivity in baseline
-- Expected Patterns: Random vibrations with occasional resonant peaks, baseline around 0""",
-
-        'vibrometer': f"""
-DEVICE TYPE: Laser Vibrometer ({tag_name})
-- Typical Range: 0.01 mm/s to 1000 mm/s velocity
-- Measurement Units: mm/s or μm/s
-- Frequency Response: DC to 20 kHz
-- Resolution: 0.001 mm/s
-- Behavior Characteristics:
-  * Extremely sensitive to minute vibrations
-  * Weather dependent (rain, fog affects laser)
-  * Shows structural modes very clearly
-  * Less noise than accelerometers
-  * May have occasional dropouts in bad weather
-- Expected Patterns: Low-amplitude oscillations with clear harmonic content""",
-
-        'strain_gauge': f"""
-DEVICE TYPE: Strain Gauge ({tag_name})
-- Typical Range: ±1000 to ±50000 microstrain (με)
-- Measurement Units: microstrain (με)
-- Resolution: 0.1 με
-- Stability: Long-term drift <2 με/year
-- Behavior Characteristics:
-  * Temperature compensation may not be perfect (±1-5 με/°C)
-  * Shows load effects from traffic, wind pressure
-  * Gradual trends from creep and relaxation
-  * Daily thermal cycles clearly visible
-  * Occasional jumps from thermal shock
-- Expected Patterns: Baseline drift with cyclic loading patterns, thermal effects""",
-
-        'displacement': f"""
-DEVICE TYPE: Displacement Sensor ({tag_name})
-- Typical Range: ±10mm to ±500mm
-- Measurement Units: mm
-- Resolution: 0.001-0.01mm
-- Linearity: ±0.01-0.1% FS
-- Behavior Characteristics:
-  * Shows structural settlement/heave clearly
-  * Temperature effects on structure cause expansion/contraction
-  * Wind loads cause reversible displacements
-  * Long-term trends from structural aging
-  * Occasional sudden movements from load events
-- Expected Patterns: Slow trends with daily thermal cycles and dynamic responses""",
-
-        'inclinometer': f"""
-DEVICE TYPE: Inclinometer ({tag_name})
-- Typical Range: ±15° to ±90°
-- Measurement Units: degrees or mrad
-- Resolution: 0.001° to 0.01°
-- Stability: 0.01°/year drift
-- Behavior Characteristics:
-  * Sensitive to foundation settlement
-  * Wind loading causes temporary tilting
-  * Temperature gradients affect readings
-  * Very slow long-term trends
-  * Occasional step changes from structural events
-- Expected Patterns: Nearly constant with small thermal variations and rare events""",
-
-        'piezometer': f"""
-DEVICE TYPE: Piezometer ({tag_name})
-- Typical Range: 0-100 kPa to 0-2000 kPa
-- Measurement Units: kPa or mH2O
-- Resolution: 0.1 kPa
-- Response Time: Minutes to hours
-- Behavior Characteristics:
-  * Seasonal variations (wet/dry cycles)
-  * Slow response to precipitation
-  * Temperature effects on fluid density
-  * Long-term trends from groundwater changes
-  * Barometric pressure effects (0.1-1 kPa)
-- Expected Patterns: Gradual changes with seasonal cycles and weather effects""",
-
-        'extensometer': f"""
-DEVICE TYPE: Extensometer ({tag_name})
-- Typical Range: 0-50mm to 0-1000mm cumulative
-- Measurement Units: mm
-- Resolution: 0.01mm
-- Stability: Excellent long-term
-- Behavior Characteristics:
-  * Monotonic settlement in most cases
-  * Temperature expansion/contraction cycles
-  * Rate changes with load or water conditions
-  * Occasional acceleration during events
-  * Nearly irreversible cumulative movement
-- Expected Patterns: Gradually increasing values with thermal oscillations""",
-
-        'weather_station': f"""
-DEVICE TYPE: Weather Station ({tag_name})
-- Parameter dependent:
-  * Wind Speed: 0-50 m/s, gusty patterns
-  * Temperature: -40°C to +60°C, daily cycles
-  * Humidity: 0-100%, weather dependent
-  * Pressure: 950-1050 hPa, gradual changes
-- Behavior Characteristics:
-  * Strong daily and seasonal cycles
-  * Weather front passages cause rapid changes
-  * Wind shows turbulent, gusty behavior
-  * Temperature has clear diurnal patterns
-- Expected Patterns: Realistic meteorological variations""",
-
-        'crack_monitor': f"""
-DEVICE TYPE: Crack Width Monitor ({tag_name})
-- Typical Range: 0-50mm crack width
-- Measurement Units: mm
-- Resolution: 0.001mm
-- Stability: Good long-term tracking
-- Behavior Characteristics:
-  * Thermal expansion/contraction dominates
-  * Structural loading effects
-  * Long-term growth trends in active cracks
-  * Daily thermal cycles prominent
-  * Occasional sudden changes during events
-- Expected Patterns: Cyclic thermal variations with possible growth trends""",
-
-        'load_cell': f"""
-DEVICE TYPE: Load Cell ({tag_name})
-- Typical Range: 0-10 kN to 0-10 MN
-- Measurement Units: kN or MN
-- Resolution: 0.01-0.1% FS
-- Stability: ±0.02% FS/year
-- Behavior Characteristics:
-  * Live load variations from traffic/people
-  * Temperature effects on structure and sensor
-  * Dead load changes from added materials
-  * Dynamic responses to loading events
-  * Possible baseline drift over time
-- Expected Patterns: Baseline load with traffic/loading variations and thermal effects""",
-
-        'generic_sensor': f"""
-DEVICE TYPE: Generic Sensor ({tag_name})
-- Generate realistic monitoring data appropriate for structural health monitoring
-- Include natural variations, noise, and measurement characteristics
-- Show both short-term dynamic responses and long-term trends
-- Include environmental effects and realistic engineering behavior"""
-    }
+    if chat_llm is None:
+        # Fallback to basic prompt if no LLM available
+        return f"""
+DEVICE TYPE: {device_info.get('type', 'sensor').title()} Sensor ({tag_name})
+- Measurement: {device_info.get('measurement', 'process parameter')}
+- Units: {device_info.get('units', 'various')}
+- Typical Range: {device_info.get('typical_range', 'application dependent')}
+- Application: {device_info.get('application', 'general industrial')}
+- Generate realistic sensor data with appropriate noise, patterns, and behavior for this measurement type."""
     
-    return device_prompts.get(device_type, device_prompts['generic_sensor'])
+    # Create a prompt to ask the LLM to generate device-specific information
+    device_analysis_prompt = f"""You are an expert in industrial sensors and instrumentation. Analyze the sensor tag name "{tag_name}" and provide detailed specifications for realistic time series generation.
+
+Based on the tag name, determine:
+1. The sensor type and measurement principle
+2. Typical operating ranges and units
+3. Expected behavior patterns and characteristics
+4. Noise levels and measurement precision
+5. Environmental factors that affect readings
+6. Industry-specific considerations
+
+TAG NAME: {tag_name}
+DETECTED SENSOR TYPE: {device_info.get('type', 'unknown')}
+MEASUREMENT TYPE: {device_info.get('measurement', 'unknown')}
+APPLICATION DOMAIN: {device_info.get('application', 'general industrial')}
+
+Provide a comprehensive sensor specification block that includes:
+- Typical measurement range
+- Units of measurement
+- Resolution/precision
+- Expected behavior characteristics
+- Environmental influences
+- Typical patterns (daily cycles, trends, noise levels)
+- Industry-specific considerations
+
+Format as a detailed specification block starting with "DEVICE TYPE:" and including all relevant technical details for realistic time series generation."""
+
+    try:
+        # Get LLM-generated device specification
+        print(f"🔍 Generating device-specific prompt for {tag_name} using LLM...")
+        device_spec = chat_llm.generate(device_analysis_prompt)
+        print(f"✅ Generated device specification for {tag_name}")
+        return device_spec
+    except Exception as e:
+        print(f"❌ Error generating device prompt for {tag_name}: {e}")
+        # Fallback to basic template
+        return f"""
+DEVICE TYPE: {device_info.get('type', 'sensor').title()} Sensor ({tag_name})
+- Measurement: {device_info.get('measurement', 'process parameter')}
+- Units: {device_info.get('units', 'various')}
+- Typical Range: {device_info.get('typical_range', 'application dependent')}
+- Application: {device_info.get('application', 'general industrial')}
+- Behavior: Generate realistic sensor data with appropriate noise, patterns, and behavior
+- Environmental Effects: Consider temperature, humidity, and operational conditions
+- Expected Patterns: Include natural variations, daily cycles, and measurement characteristics"""
 
 
 def parse_timeseries_response(response: str, tag_name: str, sequence_length: int, 
@@ -718,24 +1030,37 @@ def parse_timeseries_response(response: str, tag_name: str, sequence_length: int
 def generate_timeseries_with_llm(tag_name: str, description: str, 
                                 sequence_length: int, tag_index: int, 
                                 chat_llm) -> List[float]:
-    """Generate timeseries data using LLM."""
+    """Generate timeseries data using LLM with self-reflection for quality assurance."""
     try:
         prompt = create_timeseries_generation_prompt(
-            tag_name, description, sequence_length
+            tag_name, description, sequence_length, chat_llm=chat_llm
         )
         print(f"🤖 Generating timeseries for {tag_name} with LLM")
         print(f"📝 Prompt (first 100 chars): '{prompt[:100]}...'")
         print(f"🎯 Model: {getattr(chat_llm, 'model_name', 'unknown')}")
             
+        # Initial generation
         response = chat_llm.generate(prompt)
         print(f"✅ LLM response received for {tag_name}")
         print(f"📊 Response (first 100 chars): '{response[:100]}...'")
         
-        parsed_data = parse_timeseries_response(response, tag_name, sequence_length, tag_index)
-        print(f"✅ Successfully parsed {len(parsed_data)} values for {tag_name}")
-        print(f"📈 Range: {min(parsed_data):.3f} to {max(parsed_data):.3f}")
+        initial_data = parse_timeseries_response(response, tag_name, sequence_length, tag_index)
+        print(f"✅ Successfully parsed {len(initial_data)} initial values for {tag_name}")
+        print(f"📈 Initial range: {min(initial_data):.3f} to {max(initial_data):.3f}")
         
-        return parsed_data
+        # Self-reflection step
+        print(f"🔍 Starting timeseries self-reflection for {tag_name}...")
+        final_data, was_improved = reflect_on_timeseries_generation(
+            tag_name, description, initial_data, sequence_length, tag_index, chat_llm, max_retries=2
+        )
+        
+        if was_improved:
+            print(f"✅ Timeseries improved through reflection for {tag_name}")
+            print(f"📈 Final range: {min(final_data):.3f} to {max(final_data):.3f}")
+        else:
+            print(f"✅ Initial timeseries passed reflection for {tag_name}")
+            
+        return final_data
         
     except Exception as e:
         print(f"❌ ERROR in generate_timeseries_with_llm for {tag_name}: {e}")
@@ -762,8 +1087,26 @@ def generate_timeseries_with_llm(tag_name: str, description: str,
         return generate_mock_timeseries(sequence_length, pattern, base)
 
 
-def generate_tag_names_from_description(description: str, num_tags: int) -> list:
-    """Generate appropriate tag names based on description keywords."""
+def generate_tag_names_from_description(description: str, num_tags: int, chat_llm=None) -> list:
+    """Generate appropriate tag names using LLM or fallback to keyword matching."""
+    
+    # Try LLM-based generation first if available
+    if chat_llm is not None:
+        try:
+            print(f"🚀 Generating {num_tags} tag names using LLM for: '{description[:50]}...'")
+            prompt = create_tag_generation_prompt(description, num_tags)
+            response = chat_llm.generate(prompt)
+            print(f"📝 LLM tag response: '{response[:50]}...'")
+            tags = parse_tag_names_response(response, num_tags)
+            print(f"✅ LLM generated {len(tags)} tags successfully")
+            return tags
+        except Exception as e:
+            print(f"❌ LLM tag generation failed: {e}")
+            print("🔄 Falling back to keyword-based tag generation")
+    else:
+        print("⚠️ No LLM available, using keyword-based tag generation")
+    
+    # Fallback to keyword-based generation
     keywords_to_tags = {
         # Food & Dairy Processing
         'milk': ['PASTEURIZER_TEMP_01', 'HOMOGENIZER_PRESS_02', 'TANK_LEVEL_RAW_MILK', 'FILLING_LINE_SPEED', 'CIP_FLOW_RATE'],
@@ -842,6 +1185,7 @@ def generate_tag_names_from_description(description: str, num_tags: int) -> list
         else:
             tags.append(f'SENSOR_{len(tags) + 1:02d}')
     
+    print(f"📋 Keyword-based generation produced {len(tags)} tags")
     return tags[:num_tags]
 
 def handle_generate_timeseries_from_text(request: TextToTimeSeriesRequest, bridge_text2ts_available: bool) -> JSONResponse:
@@ -1035,7 +1379,8 @@ def handle_generate_tags(request: TagGenerationRequest, bridge_text2ts_available
             print("Generating tags with keyword mapping")
             generated_tags = generate_tag_names_from_description(
                 request.text_description, 
-                request.num_tags
+                request.num_tags,
+                chat_llm
             )
             tag_generation_method = "keyword"
         
@@ -1223,7 +1568,8 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
             print("Generating tags with keyword mapping")
             generated_tags = generate_tag_names_from_description(
                 request.text_description, 
-                request.num_tags
+                request.num_tags,
+                chat_llm
             )
             tag_generation_method = "keyword"
         
