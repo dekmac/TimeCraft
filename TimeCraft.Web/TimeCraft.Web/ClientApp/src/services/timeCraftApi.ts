@@ -3,7 +3,9 @@ import type {
   GenerateTagsRequest, 
   GenerateTagsResponse, 
   GenerateTimeSeriesRequest, 
-  GenerateTimeSeriesResponse 
+  GenerateTimeSeriesResponse,
+  GenerateAnomalyRequest,
+  GenerateAnomalyResponse
 } from '../types/api';
 
 class TimeCraftApiService {
@@ -61,6 +63,12 @@ class TimeCraftApiService {
 
   async generateTimeSeries(request: GenerateTimeSeriesRequest): Promise<GenerateTimeSeriesResponse> {
     const response = await this.api.post<GenerateTimeSeriesResponse>('/timecraft/generate-timeseries', request);
+    return response.data;
+  }
+
+  async generateAnomaly(request: GenerateAnomalyRequest): Promise<GenerateAnomalyResponse> {
+    console.log('Generating anomaly with request:', request);
+    const response = await this.api.post<GenerateAnomalyResponse>('/timecraft/generate-anomaly', request);
     return response.data;
   }
 }

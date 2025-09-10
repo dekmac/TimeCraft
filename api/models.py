@@ -106,3 +106,28 @@ class HealthResponse(BaseModel):
     """Health check response model."""
     status: str
     message: str
+
+
+class AnomalyGenerationRequest(BaseModel):
+    """Request model for anomaly generation."""
+    tag_name: str
+    tag_description: str
+    existing_timeseries: List[float]
+    injection_start_index: int
+    injection_end_index: int
+    anomaly_type: str
+    anomaly_description: str
+    severity: Optional[float] = 1.0
+    model_name: Optional[str] = "gpt-4o"
+    temperature: Optional[float] = 0.0
+
+
+class AnomalyGenerationResponse(BaseModel):
+    """Response model for anomaly generation."""
+    success: bool
+    message: str
+    tag_name: str
+    modified_timeseries: List[float]
+    anomaly_start_index: int
+    anomaly_end_index: int
+    anomaly_type: str

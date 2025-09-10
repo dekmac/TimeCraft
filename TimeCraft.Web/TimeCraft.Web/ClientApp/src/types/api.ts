@@ -15,6 +15,8 @@ export interface TagProgress extends GeneratedTag {
     status: TagProgressStatus;
     error?: string;
     timeSeriesData?: TimeSeriesData;
+    anomalies?: AnomalyInfo[];
+    selectedInjectionPoint?: InjectionPoint;
 }
 
 export interface GenerateTagsRequest {
@@ -38,4 +40,39 @@ export interface GenerateTimeSeriesResponse {
     timeSeries: number[];
     timestamps: string[];
     message?: string;
+}
+
+export interface GenerateAnomalyRequest {
+    tagName: string;
+    tagDescription: string;
+    existingTimeSeries: number[];
+    injectionStartIndex: number;
+    injectionEndIndex: number;
+    anomalyType: string;
+    anomalyDescription: string;
+    severity: number;
+}
+
+export interface GenerateAnomalyResponse {
+    success: boolean;
+    message: string;
+    tagName: string;
+    modifiedTimeSeries: number[];
+    timestamps: string[];
+    anomalyStartIndex: number;
+    anomalyEndIndex: number;
+    anomalyType: string;
+}
+
+export interface AnomalyInfo {
+    startIndex: number;
+    endIndex: number;
+    type: string;
+    description: string;
+    severity: number;
+}
+
+export interface InjectionPoint {
+    index: number;
+    selected: boolean;
 }

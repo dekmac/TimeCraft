@@ -17,6 +17,37 @@ export const useTimeCraft = () => {
     ));
   };
 
+  const updateTagTimeSeriesData = (tagIndex: number, newData: number[], newTimestamps?: string[]) => {
+    setTagProgress(prev => prev.map((tag, i) => {
+      if (i === tagIndex && tag.timeSeriesData) {
+        const updatedTimeSeriesData = {
+          ...tag.timeSeriesData,
+          data: newData,
+          timestamps: newTimestamps || tag.timeSeriesData.timestamps
+        };
+        
+        return {
+          ...tag,
+          timeSeriesData: updatedTimeSeriesData
+        };
+      }
+      return tag;
+    }));
+
+    // Also update the global time series data
+    setTimeSeriesData(prev => prev.map(ts => {
+      const tag = tagProgress[tagIndex];
+      if (tag && ts.name === tag.tag) {
+        return {
+          ...ts,
+          data: newData,
+          timestamps: newTimestamps || ts.timestamps
+        };
+      }
+      return ts;
+    }));
+  };
+
   const generateTimeSeries = async () => {
     if (!description.trim()) {
       setError('Please enter a description');
@@ -218,6 +249,7 @@ export const useTimeCraft = () => {
     error,
     generateTimeSeries,
     clearAll,
-    retryTag
+    retryTag,
+    updateTagTimeSeriesData
   };
 };

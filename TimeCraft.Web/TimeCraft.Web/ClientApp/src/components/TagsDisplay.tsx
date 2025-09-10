@@ -1,5 +1,7 @@
 import React from 'react';
 import { MiniTimeSeriesChart } from './MiniTimeSeriesChart';
+import { AnomalyControls } from './AnomalyControls';
+import { useAnomaly } from '../hooks/useAnomaly';
 import type { GeneratedTag, TagProgress, TagProgressStatus } from '../types/api';
 
 interface TagsDisplayProps {
@@ -7,6 +9,7 @@ interface TagsDisplayProps {
   tagProgress?: TagProgress[];
   dataLength: number;
   onRetryTag?: (tagIndex: number) => void;
+  onUpdateTagData?: (tagIndex: number, newData: number[], newTimestamps?: string[]) => void;
 }
 
 const getStatusIcon = (status: TagProgressStatus) => {
@@ -66,10 +69,46 @@ const getStatusColor = (status: TagProgressStatus) => {
   }
 };
 
-export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dataLength, onRetryTag }) => {
+export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dataLength, onRetryTag, onUpdateTagData }) => {
+  const {
+    isGeneratingAnomaly,
+    anomalyError,
+    selectedInjectionPoints,
+    selectInjectionPoint,
+    generateAnomaly,
+    getAnomalyTypes,
+    setAnomalyError
+  } = useAnomaly();
+
   if (tags.length === 0) {
     return null;
   }
+
+  const handleGenerateAnomaly = async (
+    tagIndex: number,
+    tagName: string,
+    tagDescription: string,
+    existingTimeSeries: number[],
+    anomalyType: string,
+    anomalyDescription: string,
+    severity: number
+  ) => {
+    const result = await generateAnomaly(
+      tagIndex,
+      tagName,
+      tagDescription,
+      existingTimeSeries,
+      anomalyType,
+      anomalyDescription,
+      severity
+    );
+    
+    if (result?.success && result.modifiedTimeSeries && onUpdateTagData) {
+      // Update the tag progress with the new time series data
+      onUpdateTagData(tagIndex, result.modifiedTimeSeries, result.timestamps);
+      console.log('Anomaly generated successfully:', result);
+    }
+  };
 
   return (
     <div className="glass-effect p-6 mb-6">
@@ -104,9 +143,44 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dat
                     data={progress.timeSeriesData.data} 
                     tagName={tag.tag}
                     dataLength={dataLength}
+                    selectedInjectionPoint={selectedInjectionPoints.get(index)}
+                    isInteractive={status === 'complete'}
+                    onPointClick={(pointIndex) => selectInjectionPoint(index, pointIndex)}
                   />
                   <div className="mt-1 text-xs text-gray-500 text-center">
                     Range: {Math.min(...progress.timeSeriesData.data).toFixed(3)} - {Math.max(...progress.timeSeriesData.data).toFixed(3)}
+                  </div>
+                </div>
+              )}
+
+              {/* Anomaly Controls - only show for completed tags */}
+              {status === 'complete' && progress?.timeSeriesData && (
+                <div className="mb-3">
+                  <AnomalyControls
+                    tagIndex={index}
+                    tagName={tag.tag}
+                    tagDescription={tag.description}
+                    existingTimeSeries={progress.timeSeriesData.data}
+                    selectedInjectionPoint={selectedInjectionPoints.get(index)}
+                    isGeneratingAnomaly={isGeneratingAnomaly}
+                    anomalyTypes={getAnomalyTypes()}
+                    onGenerateAnomaly={handleGenerateAnomaly}
+                    onSelectInjectionPoint={selectInjectionPoint}
+                  />
+                </div>
+              )}
+
+              {/* Error Display */}
+              {anomalyError && (
+                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                  <div className="flex items-center justify-between">
+                    <span>{anomalyError}</span>
+                    <button
+                      onClick={() => setAnomalyError(null)}
+                      className="text-red-400 hover:text-red-600"
+                    >
+                      ✕
+                    </button>
                   </div>
                 </div>
               )}

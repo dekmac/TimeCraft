@@ -39,7 +39,8 @@ from api.startup import (
 from api.models import (
     HealthResponse, TextRefinementRequest, TextToTimeSeriesRequest,
     DomainPromptGenerationRequest, TargetAwareGenerationRequest,
-    AggregateTimeSeriesRequest, TagGenerationRequest, SingleTimeSeriesRequest
+    AggregateTimeSeriesRequest, TagGenerationRequest, SingleTimeSeriesRequest,
+    AnomalyGenerationRequest
 )
 from api.helpers import get_component_status
 from api.file_handlers import (
@@ -54,6 +55,7 @@ from api.timeseries_handlers import (
     handle_target_aware_generation, handle_aggregate_timeseries_generation,
     handle_generate_tags, handle_generate_single_timeseries, refine_scenario_prompt
 )
+from api.anomaly_handlers import handle_generate_anomaly
 
 # Initialize components
 log_startup_environment()
@@ -205,12 +207,16 @@ async def generate_tags(request: TagGenerationRequest):
     return handle_generate_tags(request, COMPONENTS['BRIDGE_TEXT2TS_AVAILABLE'])
 
 
-@app.post("/generate-timeseries-for-tag") 
+@app.post("/generate-timeseries-for-tag")
 async def generate_timeseries_for_tag(request: SingleTimeSeriesRequest):
     """Generate timeseries data for a single tag."""
     return handle_generate_single_timeseries(request, COMPONENTS['BRIDGE_TEXT2TS_AVAILABLE'])
 
 
+@app.post("/generate-anomaly")
+async def generate_anomaly(request: AnomalyGenerationRequest):
+    """Generate anomalous data for injection into existing time series."""
+    return handle_generate_anomaly(request, COMPONENTS['BRIDGE_TEXT2TS_AVAILABLE'])
 @app.post("/generate-aggregate-timeseries")
 async def generate_aggregate_timeseries(request: AggregateTimeSeriesRequest):
     """

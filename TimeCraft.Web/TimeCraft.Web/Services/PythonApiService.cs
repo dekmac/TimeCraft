@@ -313,4 +313,118 @@ public class PythonApiService : IPythonApiService
             throw;
         }
     }
+
+    public async Task<GenerateAnomalyResponse> GenerateAnomalyAsync(GenerateAnomalyRequest request)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "Calling Python API /generate-anomaly for tag: {TagName}, injection range: {StartIndex}-{EndIndex}",
+                request.TagName,
+                request.InjectionStartIndex,
+                request.InjectionEndIndex
+            );
+
+            var json = JsonSerializer.Serialize(new
+            {
+                tag_name = request.TagName,
+                tag_description = request.TagDescription,
+                existing_timeseries = request.ExistingTimeSeries,
+                injection_start_index = request.InjectionStartIndex,
+                injection_end_index = request.InjectionEndIndex,
+                anomaly_type = request.AnomalyType,
+                anomaly_description = request.AnomalyDescription,
+                severity = request.Severity
+            });
+
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync(
+                $"{_pythonApiBaseUrl}/generate-anomaly",
+                content
+            );
+            response.EnsureSuccessStatusCode();
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("Python API anomaly response: {Response}", responseJson);
+
+            var result = JsonSerializer.Deserialize<JsonElement>(responseJson);
+
+            var success = result.TryGetProperty("success", out var successElement) && successElement.GetBoolean();
+            var message = result.TryGetProperty("message", out var messageElement) ? messageElement.GetString() ?? string.Empty : string.Empty;
+            var tagName = result.TryGetProperty("tag_name", out var tagNameElement) ? tagNameElement.GetString() ?? request.TagName : request.TagName;
+
+            var modifiedTimeSeries = new List<double>();
+            if (result.TryGetProperty("modified_timeseries", out var timeseriesElement) && timeseriesElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in timeseriesElement.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Number)
+                    {
+                        modifiedTimeSeries.Add(item.GetDouble());
+                    }
+                }
+            }
+
+            var anomalyStartIndex = result.TryGetProperty("anomaly_start_index", out var startElement) ? startElement.GetInt32() : request.InjectionStartIndex;
+            var anomalyEndIndex = result.TryGetProperty("anomaly_end_index", out var endElement) ? endElement.GetInt32() : request.InjectionEndIndex;
+            var anomalyType = result.TryGetProperty("anomaly_type", out var typeElement) ? typeElement.GetString() ?? request.AnomalyType : request.AnomalyType;
+
+            // Generate timestamps for the modified time series
+            var timestamps = new List<string>();
+            var startTime = DateTime.UtcNow.AddHours(-modifiedTimeSeries.Count);
+            for (int i = 0; i < modifiedTimeSeries.Count; i++)
+            {
+                timestamps.Add(startTime.AddHours(i).ToString("yyyy-MM-ddTHH:mm:ssZ"));
+            }
+
+            return new GenerateAnomalyResponse
+            {
+                Success = success,
+                Message = message,
+                TagName = tagName,
+                ModifiedTimeSeries = modifiedTimeSeries,
+                Timestamps = timestamps,
+                AnomalyStartIndex = anomalyStartIndex,
+                AnomalyEndIndex = anomalyEndIndex,
+                AnomalyType = anomalyType
+            };
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogWarning("Python API call for generate-anomaly timed out");
+            return new GenerateAnomalyResponse
+            {
+                Success = false,
+                Message = "Anomaly generation timed out. Please try again.",
+                TagName = request.TagName,
+                ModifiedTimeSeries = new List<double>(),
+                Timestamps = new List<string>()
+            };
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error calling Python API for generate-anomaly");
+            return new GenerateAnomalyResponse
+            {
+                Success = false,
+                Message = $"Connection error: {ex.Message}",
+                TagName = request.TagName,
+                ModifiedTimeSeries = new List<double>(),
+                Timestamps = new List<string>()
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling Python API for generate-anomaly");
+            return new GenerateAnomalyResponse
+            {
+                Success = false,
+                Message = ex.Message,
+                TagName = request.TagName,
+                ModifiedTimeSeries = new List<double>(),
+                Timestamps = new List<string>()
+            };
+        }
+    }
 }

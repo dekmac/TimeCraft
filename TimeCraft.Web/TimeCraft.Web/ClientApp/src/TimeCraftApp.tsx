@@ -18,7 +18,8 @@ export const TimeCraftApp: React.FC = () => {
     error,
     generateTimeSeries,
     clearAll,
-    retryTag
+    retryTag,
+    updateTagTimeSeriesData
   } = useTimeCraft();
 
   return (
@@ -44,6 +45,7 @@ export const TimeCraftApp: React.FC = () => {
           tagProgress={tagProgress} 
           dataLength={dataLength}
           onRetryTag={retryTag}
+          onUpdateTagData={updateTagTimeSeriesData}
         />
       </div>
     </div>
