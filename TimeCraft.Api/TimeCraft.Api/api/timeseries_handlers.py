@@ -19,8 +19,50 @@ from .models import (
 from .helpers import (
     create_demo_response, handle_api_error, generate_mock_timeseries,
     generate_mock_domain_series, generate_mock_target_aware_series,
-    parse_llm_timeseries_response, generate_tag_names_from_description
+    parse_llm_timeseries_response
 )
+
+# Import prompts with try/except for development flexibility
+try:
+    from ..prompts import (
+        prompt_manager,
+        get_tag_generation_prompt,
+        get_tag_reflection_prompt,
+        get_timeseries_generation_prompt,
+        get_timeseries_reflection_prompt,
+        detect_device_type_from_tag
+    )
+    from ..prompts.keyword_fallbacks import (
+        generate_tags_from_keywords,
+        get_domain_specific_tags
+    )
+    PROMPTS_AVAILABLE = True
+except ImportError:
+    # Fallback imports for when running in isolation
+    try:
+        import sys
+        import os
+        # Add the parent directory to path for standalone execution
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(current_dir)
+        sys.path.insert(0, parent_dir)
+        
+        from prompts import (
+            prompt_manager,
+            get_tag_generation_prompt,
+            get_tag_reflection_prompt,
+            get_timeseries_generation_prompt,
+            get_timeseries_reflection_prompt,
+            detect_device_type_from_tag
+        )
+        from prompts.keyword_fallbacks import (
+            generate_tags_from_keywords,
+            get_domain_specific_tags
+        )
+        PROMPTS_AVAILABLE = True
+    except ImportError as e:
+        print(f"Warning: Could not import prompts module: {e}")
+        PROMPTS_AVAILABLE = False
 
 
 # Fallback ChatLLM implementation for environments without full BRIDGE dependencies
@@ -169,32 +211,33 @@ class FallbackChatLLM:
             "timeseries" not in str(prompt).lower() and
             "numerical" not in str(prompt).lower() and
             "values" not in str(prompt).lower()):
-            # This is a TAG GENERATION request - analyze domain from prompt
+            # This is a TAG GENERATION request - use domain-specific tags
             prompt_lower = str(prompt).lower()
+            domain_tags = get_domain_specific_tags()
             
             if any(keyword in prompt_lower for keyword in ["milk", "dairy", "pasteurize", "homogenize", "cheese", "yogurt"]):
-                return "PASTEURIZER_TEMP_01, HOMOGENIZER_PRESS_02, TANK_LEVEL_RAW_MILK_03, FILLING_LINE_SPEED_04, CIP_FLOW_RATE_05"
+                return ", ".join(domain_tags['dairy'][:5])
             elif any(keyword in prompt_lower for keyword in ["manufacturing", "factory", "assembly", "production", "conveyor"]):
-                return "MOTOR_VIBRATION_A1, HYDRAULIC_PRESS_01, CONVEYOR_SPEED_LINE3, TEMP_BEARING_B2, FLOW_COOLANT_C1"
+                return ", ".join(domain_tags['manufacturing'][:5])
             elif any(keyword in prompt_lower for keyword in ["chemical", "reactor", "distillation", "ph", "catalyst"]):
-                return "REACTOR_TEMP_R101, DISTILLATION_PRESS_C201, PH_ANALYZER_A301, PUMP_FLOW_P301, LEVEL_TANK_T101"
+                return ", ".join(domain_tags['chemical'][:5])
             elif any(keyword in prompt_lower for keyword in ["hvac", "chiller", "ahu", "air handling", "cooling"]):
-                return "CHILLER_TEMP_SUPPLY, AHU_FLOW_RATE_01, ROOM_HUMIDITY_ZONE2, FAN_SPEED_F301, DAMPER_POS_D201"
+                return ", ".join(domain_tags['hvac'][:5])
             elif any(keyword in prompt_lower for keyword in ["power", "generator", "turbine", "electrical", "voltage"]):
-                return "GENERATOR_VOLTAGE_G1, TURBINE_SPEED_T1, TRANSFORMER_TEMP_TR1, CURRENT_LOAD_L1, FREQUENCY_GRID_F1"
+                return ", ".join(domain_tags['power'][:5])
             elif any(keyword in prompt_lower for keyword in ["water", "treatment", "filtration", "pump", "pipeline"]):
-                return "PUMP_FLOW_P101, FILTER_PRESS_F201, CHLORINE_LEVEL_C101, TURBIDITY_T301, PH_EFFLUENT_PH201"
+                return ", ".join(domain_tags['water'][:5])
             elif any(keyword in prompt_lower for keyword in ["oil", "gas", "refinery", "pipeline", "petroleum"]):
-                return "PIPELINE_PRESS_PP101, FLOW_CRUDE_F201, TEMP_DISTILLATION_TD301, LEVEL_TANK_LT401, VALVE_POS_V501"
+                return ", ".join(domain_tags['oil_gas'][:5])
             elif any(keyword in prompt_lower for keyword in ["automotive", "engine", "transmission", "brake", "vehicle"]):
-                return "ENGINE_RPM_E1, BRAKE_TEMP_B1, TRANSMISSION_PRESS_T1, FUEL_FLOW_F1, EXHAUST_TEMP_EX1"
+                return ", ".join(domain_tags['automotive'][:5])
             elif "bridge" in prompt_lower or "structural" in prompt_lower:
-                return "VIBRATION_X_AXIS, VIBRATION_Y_AXIS, STRAIN_GAUGE_CENTER, DISPLACEMENT_NORTH, TEMPERATURE_STRUCTURE"
+                return ", ".join(domain_tags['bridge'][:5])
             elif "building" in prompt_lower:
-                return "ACCELEROMETER_FLOOR_1, TILT_SENSOR_EAST, WIND_LOAD_SENSOR, FOUNDATION_SETTLEMENT, HVAC_VIBRATION"
+                return ", ".join(domain_tags['building'][:5])
             else:
                 # Generic industrial sensors
-                return "TEMPERATURE_SENSOR_01, PRESSURE_GAUGE_02, FLOW_METER_03, LEVEL_SENSOR_04, VIBRATION_MONITOR_05"
+                return ", ".join(domain_tags['default'][:5])
         else:
             # This is a TIME SERIES GENERATION request - generate numerical data
             import random
@@ -378,106 +421,6 @@ class FallbackChatLLM:
         return ", ".join(map(str, values))
 
 
-def create_tag_reflection_prompt(original_description: str, generated_tags: List[str], 
-                                num_tags: int) -> str:
-    """Create a prompt for the LLM to reflect on and assess its tag generation."""
-    tags_str = ", ".join(generated_tags)
-    
-    return f"""You are an expert in industrial monitoring systems. Please assess the quality of these generated sensor tag names.
-
-ORIGINAL REQUEST: Generate {num_tags} realistic sensor tag names for: "{original_description}"
-
-GENERATED TAGS: {tags_str}
-
-ASSESSMENT CRITERIA:
-1. RELEVANCE: Do the tags match the industrial domain described?
-2. REALISM: Are these actual sensor types used in this industry?
-3. NAMING CONVENTION: Do they follow proper industrial tag naming?
-4. QUANTITY: Are there exactly {num_tags} tags?
-5. DIVERSITY: Do they represent different measurement types?
-6. SPECIFICITY: Are they specific to the described scenario?
-
-ASSESSMENT:
-- Rate each criterion (1-10): Relevance, Realism, Naming, Quantity, Diversity, Specificity
-- Overall Quality Score (1-10):
-- Issues Found: [List any problems]
-- Improvements Needed: [Specific suggestions]
-
-Is this output ACCEPTABLE (YES/NO)? If NO, provide better tag names.
-
-FORMAT:
-RELEVANCE: [score]/10
-REALISM: [score]/10 
-NAMING: [score]/10
-QUANTITY: [score]/10
-DIVERSITY: [score]/10
-SPECIFICITY: [score]/10
-OVERALL: [score]/10
-ISSUES: [list issues]
-IMPROVEMENTS: [suggestions]
-ACCEPTABLE: YES/NO
-BETTER_TAGS: [only if NO - provide improved tags]"""
-
-
-def create_timeseries_reflection_prompt(tag_name: str, description: str, 
-                                       generated_values: List[float], 
-                                       sequence_length: int) -> str:
-    """Create a prompt for the LLM to reflect on timeseries generation quality."""
-    values_preview = ", ".join([f"{v:.3f}" for v in generated_values[:10]])
-    if len(generated_values) > 10:
-        values_preview += f"... (showing first 10 of {len(generated_values)} values)"
-    
-    stats = {
-        'min': min(generated_values),
-        'max': max(generated_values),
-        'avg': sum(generated_values) / len(generated_values),
-        'range': max(generated_values) - min(generated_values)
-    }
-    
-    return f"""You are an expert in industrial sensor data and time series analysis. Assess the quality of this generated sensor data.
-
-SENSOR TAG: {tag_name}
-SYSTEM DESCRIPTION: {description}
-REQUESTED LENGTH: {sequence_length}
-GENERATED LENGTH: {len(generated_values)}
-
-GENERATED DATA PREVIEW: {values_preview}
-
-STATISTICS:
-- Min: {stats['min']:.3f}
-- Max: {stats['max']:.3f}  
-- Average: {stats['avg']:.3f}
-- Range: {stats['range']:.3f}
-
-ASSESSMENT CRITERIA:
-1. REALISM: Are values realistic for this sensor type?
-2. VARIABILITY: Does data show appropriate variation/noise?
-3. PATTERNS: Are there realistic temporal patterns?
-4. SCALE: Are the value ranges appropriate?
-5. COMPLETENESS: Is the data length correct?
-6. PHYSICS: Does the data follow physical constraints?
-
-ASSESSMENT:
-- Rate each criterion (1-10): Realism, Variability, Patterns, Scale, Completeness, Physics
-- Overall Quality Score (1-10):
-- Issues Found: [List problems with the data]
-- Physics Violations: [Any unrealistic values or patterns]
-
-Is this data ACCEPTABLE (YES/NO)? 
-
-FORMAT:
-REALISM: [score]/10
-VARIABILITY: [score]/10
-PATTERNS: [score]/10
-SCALE: [score]/10
-COMPLETENESS: [score]/10
-PHYSICS: [score]/10
-OVERALL: [score]/10
-ISSUES: [list issues]
-VIOLATIONS: [physics problems]
-ACCEPTABLE: YES/NO"""
-
-
 def reflect_on_tag_generation(description: str, generated_tags: List[str], 
                              num_tags: int, chat_llm, 
                              max_retries: int = 2) -> Tuple[List[str], bool]:
@@ -496,10 +439,20 @@ def reflect_on_tag_generation(description: str, generated_tags: List[str],
             time.sleep(5)
         
         try:
-            # Create reflection prompt
-            reflection_prompt = create_tag_reflection_prompt(
-                description, current_tags, num_tags
-            )
+            # Create reflection prompt using the new prompt manager
+            if PROMPTS_AVAILABLE:
+                reflection_prompt = prompt_manager.get_tag_reflection_prompt(
+                    description, current_tags, num_tags
+                )
+            else:
+                # Fallback when prompts module not available
+                tags_str = ", ".join(current_tags)
+                reflection_prompt = f"""You are an expert in industrial monitoring systems. Please assess the quality of these generated sensor tag names.
+
+ORIGINAL REQUEST: Generate {num_tags} realistic sensor tag names for: "{description}"
+GENERATED TAGS: {tags_str}
+
+Is this output ACCEPTABLE (YES/NO)?"""
             
             # Get reflection assessment
             print("🤔 Asking LLM to reflect on tag quality...")
@@ -530,15 +483,9 @@ def reflect_on_tag_generation(description: str, generated_tags: List[str],
                 
                 # If no better tags provided, regenerate
                 print("🔄 Regenerating tags with more specific prompt...")
-                regeneration_prompt = f"""Based on the reflection feedback, generate exactly {num_tags} BETTER sensor tag names for: "{description}"
-
-Previous tags had issues. Generate improved tags that are:
-1. More specific to the described industry/domain
-2. Follow proper industrial naming conventions  
-3. Represent diverse sensor types needed for this scenario
-4. Use realistic equipment/location identifiers
-
-Return only the {num_tags} tag names separated by commas, no other text."""
+                regeneration_prompt = prompt_manager.get_tag_regeneration_prompt(
+                    description, num_tags, reflection_response
+                )
                 
                 regenerated_response = chat_llm.generate(regeneration_prompt)
                 regenerated_tags = parse_tag_names_response(regenerated_response, num_tags)
@@ -581,8 +528,8 @@ def reflect_on_timeseries_generation(tag_name: str, description: str,
             time.sleep(5)
         
         try:
-            # Create reflection prompt
-            reflection_prompt = create_timeseries_reflection_prompt(
+            # Create reflection prompt using the new prompt manager
+            reflection_prompt = prompt_manager.get_timeseries_reflection_prompt(
                 tag_name, description, current_values, sequence_length
             )
             
@@ -598,20 +545,9 @@ def reflect_on_timeseries_generation(tag_name: str, description: str,
                 # Regenerate with more specific guidance
                 print(f"🔄 Regenerating timeseries for {tag_name} with reflection feedback...")
                 
-                improvement_prompt = f"""Based on reflection feedback, generate IMPROVED time series data for:
-
-SENSOR TAG: {tag_name}
-SYSTEM: {description}
-LENGTH: {sequence_length} values
-
-The previous data had quality issues. Generate better data that:
-1. Has realistic values for this sensor type and application
-2. Shows appropriate variability and noise levels
-3. Follows physical constraints and engineering reality
-4. Has proper temporal patterns for this industrial scenario
-5. Uses appropriate measurement scales and ranges
-
-Return exactly {sequence_length} comma-separated numerical values, no other text."""
+                improvement_prompt = prompt_manager.get_timeseries_improvement_prompt(
+                    tag_name, description, sequence_length, reflection_response
+                )
                 
                 regenerated_response = chat_llm.generate(improvement_prompt)
                 regenerated_values = parse_timeseries_response(
@@ -635,53 +571,6 @@ Return exactly {sequence_length} comma-separated numerical values, no other text
     # If we've exhausted retries, return current values
     return current_values, (len(current_values) != len(generated_values) or 
                            current_values != generated_values)
-
-
-def create_tag_generation_prompt(description: str, num_tags: int) -> str:
-    """Create a sophisticated prompt for realistic domain-specific tag generation."""
-    return f"""You are an expert in industrial monitoring and sensor systems. Generate {num_tags} realistic sensor tag names for the following monitoring scenario.
-
-MONITORING SCENARIO: {description}
-
-INSTRUCTIONS:
-1. Analyze the scenario description to understand the industry/domain (e.g., manufacturing, food processing, chemical plant, HVAC, power generation, etc.)
-2. Generate sensor tag names that are appropriate for that specific domain
-3. Use realistic industrial naming conventions and sensor types for that industry
-
-GENERAL NAMING CONVENTIONS:
-- Format: [LOCATION]_[MEASUREMENT_TYPE]_[ID] or [EQUIPMENT]_[PARAMETER]_[INSTANCE]
-- Use clear, descriptive abbreviations
-- Include equipment/location identifiers relevant to the scenario
-- Use consistent numbering/naming schemes
-
-SENSOR TYPES TO CONSIDER BASED ON DOMAIN:
-- Temperature sensors (TEMP, TI, TE)
-- Pressure sensors (PRESS, PI, PE) 
-- Flow meters (FLOW, FI, FE)
-- Level sensors (LEVEL, LI, LE)
-- Speed/RPM sensors (SPEED, SI, SE)
-- Vibration monitors (VIB, VI, VE)
-- Current/Power meters (AMP, PI, PE)
-- pH/Chemical sensors (PH, AI, AE)
-- Humidity sensors (HUM, HI, HE)
-- Position/Valve sensors (POS, ZI, ZE)
-
-DOMAIN-SPECIFIC EXAMPLES:
-- Food Processing: PASTEURIZER_TEMP_01, TANK_LEVEL_RAW_MILK, FILLING_LINE_SPEED_02
-- Manufacturing: MOTOR_VIBRATION_A1, HYDRAULIC_PRESS_01, CONVEYOR_SPEED_LINE3
-- HVAC: CHILLER_TEMP_SUPPLY, AHU_FLOW_RATE_01, ROOM_HUMIDITY_ZONE2
-- Chemical Plant: REACTOR_TEMP_R101, DISTILLATION_PRESS_C201, PUMP_FLOW_P301
-
-REQUIREMENTS:
-1. Generate exactly {num_tags} realistic tag names
-2. Make tags specific to the scenario described
-3. Use diverse measurement types appropriate for the domain
-4. Include varied equipment/location names relevant to the scenario
-5. Use realistic industrial abbreviations and identifiers
-6. Ensure tag names reflect the actual monitoring needs of that industry
-7. Be creative but realistic - think about what sensors would actually be needed
-
-Return only the tag names separated by commas, no additional text or explanations."""
 
 
 def parse_tag_names_response(response: str, num_tags: int) -> List[str]:
@@ -712,7 +601,7 @@ def parse_tag_names_response(response: str, num_tags: int) -> List[str]:
 def generate_tag_names_with_llm(description: str, num_tags: int, chat_llm) -> List[str]:
     """Generate tag names using LLM with self-reflection for quality assurance."""
     try:
-        prompt = create_tag_generation_prompt(description, num_tags)
+        prompt = prompt_manager.get_tag_generation_prompt(description, num_tags)
         print(f"Generating tag names with prompt: '{prompt[:50]}...'")
         
         # Initial generation
@@ -739,255 +628,6 @@ def generate_tag_names_with_llm(description: str, num_tags: int, chat_llm) -> Li
         print("Falling back to keyword-based tag generation")
         # Fallback to keyword-based generation
         return generate_tag_names_from_description(description, num_tags, chat_llm)
-
-
-def create_timeseries_generation_prompt(
-    tag_name: str,
-    description: str,
-    sequence_length: int,
-    scenario: str = None,
-    time_period: str = None,
-    chat_llm = None
-) -> str:
-    """
-    Create a sophisticated prompt for realistic domain-aware timeseries generation.
-    """
-    # Parse device type from tag name for specialized prompting
-    device_info = detect_device_type_from_tag(tag_name)
-    device_prompt = get_device_specific_prompt(device_info, tag_name, chat_llm)
-    
-    scenario_text = f"\nScenario Context: {scenario}" if scenario else ""
-    time_period_text = f"\nTime Period: {time_period}" if time_period else ""
-    
-    return f"""You are generating realistic time series data for an industrial monitoring system.
-
-SENSOR DETAILS:
-Tag Name: {tag_name}
-System Description: {description}{scenario_text}{time_period_text}
-
-{device_prompt}
-
-DATA GENERATION REQUIREMENTS:
-1. Generate exactly {sequence_length} numerical values
-2. Include realistic measurement characteristics:
-   - Appropriate noise levels and measurement precision
-   - Natural drift and baseline variations
-   - Occasional data spikes or anomalies (5-10% of readings)
-   - Environmental influences (temperature, humidity, pressure)
-3. Temporal patterns:
-   - Industry-appropriate daily/operational cycles
-   - Random variations with realistic autocorrelation
-   - Gradual trends (equipment aging, process drift)
-   - Event responses (load changes, environmental factors)
-4. Data quality simulation:
-   - 2-3% outliers or measurement errors
-   - Occasional brief periods of elevated/reduced activity
-   - Realistic sensor behavior (not perfectly smooth)
-5. Engineering realism:
-   - Values should reflect real-world industrial measurements
-   - Include both positive and negative values where appropriate
-   - Show process response to operational and environmental conditions
-
-OUTPUT FORMAT:
-Return exactly {sequence_length} comma-separated numerical values representing sequential measurements.
-No additional text, explanations, or formatting - just the raw numerical data."""
-
-
-def detect_device_type_from_tag(tag_name: str) -> dict:
-    """Detect device type and parameters from tag name for specialized prompting."""
-    tag_upper = tag_name.upper()
-    
-    # Temperature sensors
-    if any(keyword in tag_upper for keyword in ['TEMP', 'TEMPERATURE', 'THERMAL']):
-        return {
-            'type': 'temperature',
-            'measurement': 'temperature',
-            'units': '°C or °F',
-            'typical_range': '-40°C to +150°C',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Pressure sensors
-    elif any(keyword in tag_upper for keyword in ['PRESS', 'PRESSURE', 'VACUUM']):
-        return {
-            'type': 'pressure',
-            'measurement': 'pressure',
-            'units': 'kPa, bar, or psi',
-            'typical_range': '0-1000 kPa',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Flow meters
-    elif any(keyword in tag_upper for keyword in ['FLOW', 'FLOWRATE', 'VOLUMETRIC', 'MASS_FLOW']):
-        return {
-            'type': 'flow',
-            'measurement': 'flow rate',
-            'units': 'L/min, m³/h, or kg/h',
-            'typical_range': '0-1000 L/min',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Level sensors
-    elif any(keyword in tag_upper for keyword in ['LEVEL', 'HEIGHT', 'DEPTH', 'TANK']):
-        return {
-            'type': 'level',
-            'measurement': 'liquid/solid level',
-            'units': 'mm, cm, or %',
-            'typical_range': '0-100%',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Speed/RPM sensors
-    elif any(keyword in tag_upper for keyword in ['SPEED', 'RPM', 'VELOCITY', 'ROTATION']):
-        return {
-            'type': 'speed',
-            'measurement': 'rotational or linear speed',
-            'units': 'RPM, m/s, or Hz',
-            'typical_range': '0-3600 RPM',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Vibration sensors
-    elif any(keyword in tag_upper for keyword in ['VIB', 'VIBRATION', 'ACCEL', 'ACCELEROMETER']):
-        return {
-            'type': 'vibration',
-            'measurement': 'vibration/acceleration',
-            'units': 'm/s², g, or mm/s',
-            'typical_range': '±50g',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Current/Power sensors
-    elif any(keyword in tag_upper for keyword in ['CURRENT', 'AMP', 'POWER', 'WATT', 'VOLTAGE', 'VOLT']):
-        return {
-            'type': 'electrical',
-            'measurement': 'electrical parameter',
-            'units': 'A, V, W, or kW',
-            'typical_range': '0-1000A or 0-500V',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # pH/Chemical sensors
-    elif any(keyword in tag_upper for keyword in ['PH', 'CHEMICAL', 'CONCENTRATION', 'PPM', 'CONDUCTIVITY']):
-        return {
-            'type': 'chemical',
-            'measurement': 'chemical property',
-            'units': 'pH, ppm, or µS/cm',
-            'typical_range': '0-14 pH or 0-1000 ppm',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Humidity sensors
-    elif any(keyword in tag_upper for keyword in ['HUMID', 'HUMIDITY', 'MOISTURE', 'RH']):
-        return {
-            'type': 'humidity',
-            'measurement': 'relative humidity',
-            'units': '% RH',
-            'typical_range': '0-100% RH',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Position/Valve sensors
-    elif any(keyword in tag_upper for keyword in ['POS', 'POSITION', 'VALVE', 'ACTUATOR', 'DISPLACEMENT']):
-        return {
-            'type': 'position',
-            'measurement': 'position/displacement',
-            'units': 'mm, cm, or %',
-            'typical_range': '0-100%',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-    
-    # Generic catch-all
-    else:
-        return {
-            'type': 'generic',
-            'measurement': 'process parameter',
-            'units': 'various',
-            'typical_range': 'application dependent',
-            'application': _detect_application_from_tag(tag_upper)
-        }
-
-
-def _detect_application_from_tag(tag_upper: str) -> str:
-    """Detect the application domain from tag name."""
-    if any(keyword in tag_upper for keyword in ['PASTEURIZER', 'HOMOGENIZER', 'MILK', 'DAIRY', 'CIP']):
-        return 'dairy_processing'
-    elif any(keyword in tag_upper for keyword in ['REACTOR', 'DISTILLATION', 'CATALYST', 'COLUMN']):
-        return 'chemical_processing'
-    elif any(keyword in tag_upper for keyword in ['CHILLER', 'AHU', 'HVAC', 'DAMPER', 'FAN']):
-        return 'hvac_systems'
-    elif any(keyword in tag_upper for keyword in ['GENERATOR', 'TURBINE', 'TRANSFORMER', 'GRID']):
-        return 'power_generation'
-    elif any(keyword in tag_upper for keyword in ['PUMP', 'FILTER', 'CLARIFIER', 'EFFLUENT']):
-        return 'water_treatment'
-    elif any(keyword in tag_upper for keyword in ['ENGINE', 'BRAKE', 'TRANSMISSION', 'FUEL']):
-        return 'automotive'
-    elif any(keyword in tag_upper for keyword in ['MOTOR', 'CONVEYOR', 'HYDRAULIC', 'PRODUCTION']):
-        return 'manufacturing'
-    elif any(keyword in tag_upper for keyword in ['PIPELINE', 'CRUDE', 'REFINERY', 'COMPRESSOR']):
-        return 'oil_gas'
-    else:
-        return 'general_industrial'
-
-
-def get_device_specific_prompt(device_info: dict, tag_name: str, chat_llm=None) -> str:
-    """Generate device-specific prompting using LLM analysis of the tag name."""
-    
-    if chat_llm is None:
-        # Fallback to basic prompt if no LLM available
-        return f"""
-DEVICE TYPE: {device_info.get('type', 'sensor').title()} Sensor ({tag_name})
-- Measurement: {device_info.get('measurement', 'process parameter')}
-- Units: {device_info.get('units', 'various')}
-- Typical Range: {device_info.get('typical_range', 'application dependent')}
-- Application: {device_info.get('application', 'general industrial')}
-- Generate realistic sensor data with appropriate noise, patterns, and behavior for this measurement type."""
-    
-    # Create a prompt to ask the LLM to generate device-specific information
-    device_analysis_prompt = f"""You are an expert in industrial sensors and instrumentation. Analyze the sensor tag name "{tag_name}" and provide detailed specifications for realistic time series generation.
-
-Based on the tag name, determine:
-1. The sensor type and measurement principle
-2. Typical operating ranges and units
-3. Expected behavior patterns and characteristics
-4. Noise levels and measurement precision
-5. Environmental factors that affect readings
-6. Industry-specific considerations
-
-TAG NAME: {tag_name}
-DETECTED SENSOR TYPE: {device_info.get('type', 'unknown')}
-MEASUREMENT TYPE: {device_info.get('measurement', 'unknown')}
-APPLICATION DOMAIN: {device_info.get('application', 'general industrial')}
-
-Provide a comprehensive sensor specification block that includes:
-- Typical measurement range
-- Units of measurement
-- Resolution/precision
-- Expected behavior characteristics
-- Environmental influences
-- Typical patterns (daily cycles, trends, noise levels)
-- Industry-specific considerations
-
-Format as a detailed specification block starting with "DEVICE TYPE:" and including all relevant technical details for realistic time series generation."""
-
-    try:
-        # Get LLM-generated device specification
-        print(f"🔍 Generating device-specific prompt for {tag_name} using LLM...")
-        device_spec = chat_llm.generate(device_analysis_prompt)
-        print(f"✅ Generated device specification for {tag_name}")
-        return device_spec
-    except Exception as e:
-        print(f"❌ Error generating device prompt for {tag_name}: {e}")
-        # Fallback to basic template
-        return f"""
-DEVICE TYPE: {device_info.get('type', 'sensor').title()} Sensor ({tag_name})
-- Measurement: {device_info.get('measurement', 'process parameter')}
-- Units: {device_info.get('units', 'various')}
-- Typical Range: {device_info.get('typical_range', 'application dependent')}
-- Application: {device_info.get('application', 'general industrial')}
-- Behavior: Generate realistic sensor data with appropriate noise, patterns, and behavior
-- Environmental Effects: Consider temperature, humidity, and operational conditions
-- Expected Patterns: Include natural variations, daily cycles, and measurement characteristics"""
 
 
 def parse_timeseries_response(response: str, tag_name: str, sequence_length: int, 
@@ -1032,8 +672,13 @@ def generate_timeseries_with_llm(tag_name: str, description: str,
                                 chat_llm) -> List[float]:
     """Generate timeseries data using LLM with self-reflection for quality assurance."""
     try:
-        prompt = create_timeseries_generation_prompt(
-            tag_name, description, sequence_length, chat_llm=chat_llm
+        # Generate device-specific prompt
+        device_info = detect_device_type_from_tag(tag_name)
+        device_prompt = prompt_manager.get_device_analysis_prompt(tag_name, device_info)
+        
+        # Generate the main prompt
+        prompt = prompt_manager.get_timeseries_generation_prompt(
+            tag_name, description, sequence_length, device_prompt=device_prompt
         )
         print(f"🤖 Generating timeseries for {tag_name} with LLM")
         print(f"📝 Prompt (first 100 chars): '{prompt[:100]}...'")
@@ -1094,7 +739,7 @@ def generate_tag_names_from_description(description: str, num_tags: int, chat_ll
     if chat_llm is not None:
         try:
             print(f"🚀 Generating {num_tags} tag names using LLM for: '{description[:50]}...'")
-            prompt = create_tag_generation_prompt(description, num_tags)
+            prompt = prompt_manager.get_tag_generation_prompt(description, num_tags)
             response = chat_llm.generate(prompt)
             print(f"📝 LLM tag response: '{response[:50]}...'")
             tags = parse_tag_names_response(response, num_tags)
@@ -1106,87 +751,8 @@ def generate_tag_names_from_description(description: str, num_tags: int, chat_ll
     else:
         print("⚠️ No LLM available, using keyword-based tag generation")
     
-    # Fallback to keyword-based generation
-    keywords_to_tags = {
-        # Food & Dairy Processing
-        'milk': ['PASTEURIZER_TEMP_01', 'HOMOGENIZER_PRESS_02', 'TANK_LEVEL_RAW_MILK', 'FILLING_LINE_SPEED', 'CIP_FLOW_RATE'],
-        'dairy': ['SEPARATOR_SPEED_01', 'CREAM_FAT_CONTENT', 'PASTEURIZATION_TEMP', 'COOLING_TEMP_02', 'PACKAGE_COUNT'],
-        'pasteurize': ['PASTEURIZER_INLET_TEMP', 'PASTEURIZER_OUTLET_TEMP', 'PASTEURIZER_FLOW_RATE', 'PASTEURIZER_PRESSURE'],
-        'cheese': ['CURD_TEMP_01', 'WHEY_PH_02', 'AGING_HUMIDITY_03', 'BRINE_CONCENTRATION', 'CUTTING_SPEED'],
-        'yogurt': ['FERMENTATION_TEMP', 'CULTURE_PH', 'INCUBATION_TIME', 'COOLING_RATE', 'MIXING_SPEED'],
-        
-        # Manufacturing & Production
-        'manufacturing': ['MOTOR_VIBRATION_A1', 'HYDRAULIC_PRESS_01', 'CONVEYOR_SPEED_LINE3', 'TEMP_BEARING_B2', 'FLOW_COOLANT_C1'],
-        'factory': ['PRODUCTION_RATE_01', 'MACHINE_EFFICIENCY_02', 'POWER_CONSUMPTION_03', 'CYCLE_TIME_04', 'REJECT_COUNT_05'],
-        'assembly': ['TORQUE_WRENCH_01', 'POSITION_ROBOT_ARM', 'CYCLE_TIME_STATION', 'QUALITY_CHECK_PASS', 'PARTS_COUNT'],
-        'production': ['THROUGHPUT_RATE', 'DOWNTIME_MINUTES', 'OEE_PERCENTAGE', 'DEFECT_RATE', 'ENERGY_USAGE'],
-        'conveyor': ['BELT_SPEED_01', 'MOTOR_CURRENT_02', 'BELT_TENSION_03', 'ITEM_COUNT_04', 'TRACKING_POSITION'],
-        
-        # Chemical Processing
-        'chemical': ['REACTOR_TEMP_R101', 'DISTILLATION_PRESS_C201', 'PH_ANALYZER_A301', 'PUMP_FLOW_P301', 'LEVEL_TANK_T101'],
-        'reactor': ['REACTOR_PRESSURE', 'REACTOR_TEMPERATURE', 'AGITATOR_SPEED', 'REACTION_PH', 'CATALYST_FEED'],
-        'distillation': ['COLUMN_TEMP_TOP', 'COLUMN_TEMP_BOTTOM', 'REFLUX_RATIO', 'REBOILER_DUTY', 'PRODUCT_PURITY'],
-        
-        # HVAC & Building Systems
-        'hvac': ['CHILLER_TEMP_SUPPLY', 'AHU_FLOW_RATE_01', 'ROOM_HUMIDITY_ZONE2', 'FAN_SPEED_F301', 'DAMPER_POS_D201'],
-        'chiller': ['CHILLER_COP', 'EVAP_TEMP', 'CONDENSER_TEMP', 'REFRIGERANT_PRESS', 'COOLING_LOAD'],
-        'cooling': ['COOLING_WATER_TEMP', 'COOLING_TOWER_FAN', 'HEAT_EXCHANGER_FLOW', 'GLYCOL_CONCENTRATION'],
-        
-        # Power & Electrical
-        'power': ['GENERATOR_VOLTAGE_G1', 'TURBINE_SPEED_T1', 'TRANSFORMER_TEMP_TR1', 'CURRENT_LOAD_L1', 'FREQUENCY_GRID_F1'],
-        'generator': ['GEN_POWER_OUTPUT', 'GEN_FREQUENCY', 'GEN_VOLTAGE', 'GEN_CURRENT', 'GEN_POWER_FACTOR'],
-        'electrical': ['VOLTAGE_L1', 'CURRENT_L2', 'POWER_FACTOR_L3', 'HARMONIC_DISTORTION', 'ENERGY_METER'],
-        
-        # Water Treatment
-        'water': ['PUMP_FLOW_P101', 'FILTER_PRESS_F201', 'CHLORINE_LEVEL_C101', 'TURBIDITY_T301', 'PH_EFFLUENT_PH201'],
-        'treatment': ['CLARIFIER_LEVEL', 'SLUDGE_DENSITY', 'DISSOLVED_OXYGEN', 'CONDUCTIVITY', 'ALKALINITY'],
-        'filtration': ['FILTER_DIFFERENTIAL_PRESS', 'BACKWASH_FLOW', 'FILTRATE_TURBIDITY', 'MEDIA_DEPTH'],
-        
-        # Oil & Gas
-        'oil': ['PIPELINE_PRESS_PP101', 'FLOW_CRUDE_F201', 'TEMP_DISTILLATION_TD301', 'LEVEL_TANK_LT401', 'VALVE_POS_V501'],
-        'gas': ['GAS_FLOW_RATE', 'PIPELINE_PRESSURE', 'COMPRESSOR_SPEED', 'MOISTURE_CONTENT', 'HEATING_VALUE'],
-        'refinery': ['CRUDE_FLOW_RATE', 'FURNACE_TEMP', 'CATALYST_ACTIVITY', 'PRODUCT_OCTANE', 'SULFUR_CONTENT'],
-        
-        # Automotive
-        'automotive': ['ENGINE_RPM_E1', 'BRAKE_TEMP_B1', 'TRANSMISSION_PRESS_T1', 'FUEL_FLOW_F1', 'EXHAUST_TEMP_EX1'],
-        'engine': ['ENGINE_COOLANT_TEMP', 'OIL_PRESSURE', 'THROTTLE_POSITION', 'MANIFOLD_PRESSURE', 'IGNITION_TIMING'],
-        
-        # Generic fallbacks
-        'temperature': ['TEMPERATURE_01', 'TEMPERATURE_02', 'AMBIENT_TEMP'],
-        'pressure': ['PRESSURE_GAUGE_01', 'PRESSURE_GAUGE_02', 'SYSTEM_PRESSURE'],
-        'flow': ['FLOW_METER_01', 'FLOW_METER_02', 'FLOW_RATE_03'],
-        'level': ['LEVEL_SENSOR_01', 'LEVEL_SENSOR_02', 'TANK_LEVEL_03'],
-        'sensor': ['SENSOR_A', 'SENSOR_B', 'SENSOR_C'],
-        'monitoring': ['CPU_USAGE', 'MEMORY_USAGE', 'NETWORK_TRAFFIC'],
-        'iot': ['IOT_DEVICE_01', 'IOT_DEVICE_02', 'IOT_DEVICE_03']
-    }
-    
-    tags = []
-    lower_desc = description.lower()
-    
-    # Find matching keywords and add their tags
-    for keyword, tag_list in keywords_to_tags.items():
-        if keyword in lower_desc:
-            tags.extend(tag_list)
-            if len(tags) >= num_tags:
-                break
-    
-    # Fill remaining slots with generic industrial tags
-    generic_tags = [
-        'TEMPERATURE_SENSOR_01', 'PRESSURE_GAUGE_02', 'FLOW_METER_03', 
-        'LEVEL_SENSOR_04', 'VIBRATION_MONITOR_05', 'SPEED_SENSOR_06',
-        'CURRENT_MONITOR_07', 'POSITION_SENSOR_08', 'HUMIDITY_SENSOR_09',
-        'PH_ANALYZER_10'
-    ]
-    
-    while len(tags) < num_tags:
-        if len(generic_tags) > (len(tags) % len(generic_tags)):
-            tags.append(generic_tags[len(tags) % len(generic_tags)])
-        else:
-            tags.append(f'SENSOR_{len(tags) + 1:02d}')
-    
-    print(f"📋 Keyword-based generation produced {len(tags)} tags")
-    return tags[:num_tags]
+    # Use the keyword fallback system
+    return generate_tags_from_keywords(description, num_tags)
 
 def handle_generate_timeseries_from_text(request: TextToTimeSeriesRequest, bridge_text2ts_available: bool) -> JSONResponse:
     """Generate time series data from text description using BRIDGE model."""
@@ -1694,17 +1260,7 @@ def refine_scenario_prompt(scenario: str, sequence_length: int = 168) -> str:
         openai.api_version = os.environ.get('OPENAI_API_VERSION', '2023-05-15')
         deployment = os.environ.get('OPENAI_DEPLOYMENT_NAME', 'gpt-4o')
 
-        system_prompt = (
-            "You are an expert prompt engineer for time series data generation. "
-            "Given a user's scenario description, rewrite it as a detailed, explicit prompt for an AI timeseries generator. "
-            "Extract time periods, events, and tag-specific instructions, and write them as clear requirements. "
-            "Make sure the output is suitable for an LLM to generate realistic, scenario-driven timeseries data. "
-            "If the user provides a sequence length, include it as the number of data points. "
-            "Return only the improved prompt, no explanation."
-        )
-        user_prompt = (
-            f"Scenario: {scenario}\n\nNumber of data points: {sequence_length}\n"
-        )
+        system_prompt, user_prompt = prompt_manager.get_scenario_refinement_prompts(scenario, sequence_length)
         response = openai.ChatCompletion.create(
             deployment_id=deployment,
             messages=[
@@ -1717,13 +1273,5 @@ def refine_scenario_prompt(scenario: str, sequence_length: int = 168) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"[Azure OpenAI refine_scenario_prompt fallback] {e}")
-        # Fallback to previous rule-based template
-        prompt = (
-            f"Generate realistic hourly time series data reflecting the scenario and events described.\n"
-            f"Number of data points: {sequence_length} (one per hour for a week, H1 = Monday 00:00, H{sequence_length} = Sunday 23:00).\n\n"
-            f"Scenario: {scenario}\n\n"
-            "Requirements:\n"
-            "- Make all time/event instructions explicit and easy for an LLM to follow.\n"
-            "- Return only the numerical values for each tag, separated by commas, no additional text."
-        )
-        return prompt
+        # Fallback to the prompt manager's fallback prompt
+        return prompt_manager.get_fallback_scenario_prompt(scenario, sequence_length)
