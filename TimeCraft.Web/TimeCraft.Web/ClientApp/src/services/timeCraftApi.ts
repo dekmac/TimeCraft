@@ -5,7 +5,12 @@ import type {
   GenerateTimeSeriesRequest, 
   GenerateTimeSeriesResponse,
   GenerateAnomalyRequest,
-  GenerateAnomalyResponse
+  GenerateAnomalyResponse,
+  PublishTimeSeriesRequest,
+  PublishTimeSeriesResponse,
+  PublishDatasetRequest,
+  PublishedDataset,
+  PublishingStatusInfo
 } from '../types/api';
 
 class TimeCraftApiService {
@@ -69,6 +74,33 @@ class TimeCraftApiService {
   async generateAnomaly(request: GenerateAnomalyRequest): Promise<GenerateAnomalyResponse> {
     console.log('Generating anomaly with request:', request);
     const response = await this.api.post<GenerateAnomalyResponse>('/timecraft/generate-anomaly', request);
+    return response.data;
+  }
+
+  async publishDataset(request: PublishDatasetRequest): Promise<PublishTimeSeriesResponse> {
+    console.log('Publishing dataset with request:', request);
+    const response = await this.api.post<PublishTimeSeriesResponse>('/timecraft/publish-dataset', request);
+    return response.data;
+  }
+
+  async publishTimeSeries(request: PublishTimeSeriesRequest): Promise<PublishTimeSeriesResponse> {
+    console.log('Publishing time series with request:', request);
+    const response = await this.api.post<PublishTimeSeriesResponse>('/timecraft/publish-timeseries', request);
+    return response.data;
+  }
+
+  async getPublishedDatasets(): Promise<PublishedDataset[]> {
+    const response = await this.api.get<PublishedDataset[]>('/publishing/datasets');
+    return response.data;
+  }
+
+  async getPublishedDataset(id: string): Promise<PublishedDataset> {
+    const response = await this.api.get<PublishedDataset>(`/publishing/datasets/${id}`);
+    return response.data;
+  }
+
+  async getPublishingStatus(id: string): Promise<PublishingStatusInfo> {
+    const response = await this.api.get<PublishingStatusInfo>(`/publishing/datasets/${id}/status`);
     return response.data;
   }
 }
