@@ -59,104 +59,298 @@ def cleanup_temp_file(file_path: str):
 
 
 def generate_mock_timeseries(length: int = 168, pattern_type: str = "default", 
-                           base_value: float = 1.0) -> List[float]:
-    """Generate realistic structural monitoring time series data."""
+                           base_value: float = 1.0, context: dict = None) -> List[float]:
+    """Generate realistic scenario-aware time series data."""
     import random
     
-    # Time array (hours)
-    time = np.linspace(0, length/24, length)  # Convert to days
+    # Analyze context for scenario-specific patterns
+    if context is None:
+        context = {}
     
-    if pattern_type == "sine":
-        # Multi-frequency structural vibration pattern
-        # Primary structural mode + harmonics + environmental effects
-        data = []
-        for i, t in enumerate(time):
-            # Primary structural resonance (0.5-2 Hz scaled to daily cycle)
-            primary_freq = base_value * 0.01  # Scale base_value to frequency
-            structural = 0.1 * np.sin(2 * np.pi * primary_freq * t)
-            
-            # Environmental daily cycle (temperature/traffic effects)
-            daily_cycle = 0.05 * np.sin(2 * np.pi * t)  # 24-hour cycle
-            
-            # Traffic rush hour effects (higher amplitude 7-9am, 5-7pm)
-            hour = (t * 24) % 24
-            rush_factor = 1.0
-            if 7 <= hour <= 9 or 17 <= hour <= 19:
-                rush_factor = 1.5 + 0.3 * np.sin(2 * np.pi * (hour - 7) / 4)
-            
-            # Random vibrations + measurement noise
-            random_vibration = np.random.normal(0, 0.02)
-            measurement_noise = np.random.normal(0, 0.005)
-            
-            # Combine all effects
-            base_component = base_value * 0.001
-            dynamic_component = (structural + daily_cycle) * rush_factor
-            noise_component = random_vibration + measurement_noise
-            value = base_component + dynamic_component + noise_component
-            data.append(max(0, value))  # Ensure positive values
-            
-        return data
-        
+    scenario_type = context.get("scenario_type", "general")
+    sensor_type = context.get("sensor_type", "default")
+    facility_type = context.get("facility_type", "industrial")
+    
+    # Time array (hours)
+    time = np.linspace(0, length, length)
+    
+    # Generate scenario-specific patterns
+    if scenario_type == "historic_building" or facility_type == "historic_building":
+        return _generate_historic_building_pattern(length, pattern_type, base_value, sensor_type)
+    elif scenario_type == "commercial" or facility_type == "commercial":
+        return _generate_commercial_pattern(length, pattern_type, base_value, sensor_type)
+    elif pattern_type == "sine":
+        return _generate_sine_pattern(length, base_value, time)
     elif pattern_type == "linear":
-        # Strain gauge or displacement - shows trends + cycles
-        data = []
-        base_strain = base_value * 0.1  # Convert to microstrain scale
-        
-        for i, t in enumerate(time):
-            # Long-term structural settlement/drift
-            long_term_trend = 0.01 * t  # Gradual increase
-            
-            # Daily thermal expansion/contraction
-            thermal_cycle = 0.5 * np.sin(2 * np.pi * t - np.pi/4)
-            
-            # Load effects (traffic, wind)
-            hour = (t * 24) % 24
-            load_effect = 0.0
-            if 6 <= hour <= 22:  # Daytime activity
-                sin_component = np.sin(2 * np.pi * (hour - 6) / 16)
-                load_effect = 0.2 * (1 + 0.3 * sin_component)
-            
-            # Measurement noise and micro-vibrations
-            noise = np.random.normal(0, 0.05)
-            
-            components = [base_strain, long_term_trend, thermal_cycle,
-                          load_effect, noise]
-            value = sum(components)
-            data.append(value)
-            
-        return data
-        
+        return _generate_linear_pattern(length, base_value, time)
     else:
-        # Default: Mixed sensor behavior (pressure, inclinometer, etc.)
-        data = []
-        base_pressure = base_value
+        return _generate_default_pattern(length, base_value, time)
+
+
+def _generate_historic_building_pattern(length: int, pattern_type: str, base_value: float, sensor_type: str) -> List[float]:
+    """Generate patterns specific to historic building monitoring."""
+    data = []
+    
+    # Determine sensor-specific baseline and behavior
+    if "temp" in sensor_type.lower() or "hvac" in sensor_type.lower():
+        # Temperature sensor in historic building
+        base_temp = 20.0  # Target temperature
+        for hour in range(length):
+            hour_of_day = hour % 24
+            day_of_week = (hour // 24) % 7
+            
+            # Daily visitor pattern (building open 9-17)
+            if 9 <= hour_of_day <= 17:
+                occupancy_factor = 1.0
+                # Peak visitor hours (11-15)
+                if 11 <= hour_of_day <= 15:
+                    occupancy_factor = 1.5 if day_of_week < 5 else 2.0  # Higher on weekends
+                visitor_heat = occupancy_factor * 2.0
+            else:
+                visitor_heat = 0.0
+                
+            # HVAC setback when closed
+            if hour_of_day < 8 or hour_of_day > 18:
+                setback = -3.0
+            else:
+                setback = 0.0
+                
+            # Daily thermal cycle
+            thermal_cycle = 1.5 * np.sin(2 * np.pi * hour_of_day / 24 - np.pi/2)
+            
+            # Random noise
+            noise = np.random.normal(0, 0.3)
+            
+            temp = base_temp + visitor_heat + setback + thermal_cycle + noise
+            data.append(max(15.0, min(28.0, temp)))  # Realistic temperature bounds
+            
+    elif "humid" in sensor_type.lower():
+        # Humidity sensor in historic building
+        base_humidity = 55.0  # Target humidity for artifacts
+        for hour in range(length):
+            hour_of_day = hour % 24
+            day_of_week = (hour // 24) % 7
+            
+            # Visitor humidity contribution
+            if 9 <= hour_of_day <= 17:
+                occupancy_factor = 1.0
+                if 11 <= hour_of_day <= 15:
+                    occupancy_factor = 1.5 if day_of_week < 5 else 2.5
+                visitor_humidity = occupancy_factor * 8.0
+            else:
+                visitor_humidity = 0.0
+                
+            # Daily cycle
+            daily_cycle = 5.0 * np.sin(2 * np.pi * hour_of_day / 24)
+            
+            # Weather influence (random)
+            weather = np.random.normal(0, 3.0)
+            noise = np.random.normal(0, 1.0)
+            
+            humidity = base_humidity + visitor_humidity + daily_cycle + weather + noise
+            data.append(max(30.0, min(80.0, humidity)))  # Realistic humidity bounds
+            
+    elif "footfall" in sensor_type.lower() or "people" in sensor_type.lower():
+        # Footfall counter in historic building
+        for hour in range(length):
+            hour_of_day = hour % 24
+            day_of_week = (hour // 24) % 7
+            
+            if 9 <= hour_of_day <= 17:  # Open hours
+                # Base visitor rate
+                base_rate = 15 if day_of_week < 5 else 35  # Higher weekends
+                
+                # Peak hours multiplier
+                if 11 <= hour_of_day <= 15:
+                    peak_multiplier = 2.0
+                elif 10 <= hour_of_day <= 16:
+                    peak_multiplier = 1.5
+                else:
+                    peak_multiplier = 0.8
+                    
+                # Random variation
+                random_factor = np.random.uniform(0.5, 1.5)
+                
+                footfall = base_rate * peak_multiplier * random_factor
+                
+                # Occasional special events (5% chance)
+                if np.random.random() < 0.05:
+                    footfall *= np.random.uniform(2.0, 4.0)
+                    
+            else:
+                footfall = 0  # Closed hours
+                
+            data.append(max(0, int(footfall)))
+            
+    elif "vibration" in sensor_type.lower() or "seismic" in sensor_type.lower():
+        # Structural vibration monitoring
+        for hour in range(length):
+            hour_of_day = hour % 24
+            
+            # Base structural vibration
+            base_vibration = 0.15
+            
+            # Traffic influence (rush hours)
+            if 7 <= hour_of_day <= 9 or 17 <= hour_of_day <= 19:
+                traffic_factor = 2.0
+            elif 22 <= hour_of_day or hour_of_day <= 6:
+                traffic_factor = 0.3
+            else:
+                traffic_factor = 1.0
+                
+            # Visitor influence (minimal but present)
+            if 9 <= hour_of_day <= 17:
+                visitor_vibration = 0.02 * np.random.uniform(0.5, 1.5)
+            else:
+                visitor_vibration = 0.0
+                
+            # Wind effects
+            wind_factor = 1.0 + 0.2 * np.sin(hour * 0.1) + np.random.uniform(-0.1, 0.1)
+            
+            # Measurement noise
+            noise = np.random.normal(0, 0.01)
+            
+            vibration = base_vibration * traffic_factor * wind_factor + visitor_vibration + noise
+            data.append(max(0.05, min(2.0, vibration)))
+            
+    else:
+        # Generic sensor for historic building
+        for hour in range(length):
+            hour_of_day = hour % 24
+            day_of_week = (hour // 24) % 7
+            
+            # Base operational pattern
+            if 9 <= hour_of_day <= 17:
+                operational_factor = 1.5 if day_of_week >= 5 else 1.0  # Higher weekends
+            else:
+                operational_factor = 0.3
+                
+            # Daily cycle
+            daily_cycle = 0.2 * np.sin(2 * np.pi * hour_of_day / 24)
+            
+            # Random variation
+            noise = np.random.normal(0, 0.1)
+            
+            value = base_value * operational_factor + daily_cycle + noise
+            data.append(max(0, value))
+            
+    return data
+
+
+def _generate_commercial_pattern(length: int, pattern_type: str, base_value: float, sensor_type: str) -> List[float]:
+    """Generate patterns specific to commercial building monitoring."""
+    data = []
+    
+    for hour in range(length):
+        hour_of_day = hour % 24
+        day_of_week = (hour // 24) % 7
         
-        for i, t in enumerate(time):
-            # Weather-driven variations (barometric pressure effects)
-            weather_pattern = 2 * np.pi * t / 3 + random.random() * 2 * np.pi
-            weather_cycle = 0.2 * np.sin(weather_pattern)
+        # Commercial building operational pattern
+        if day_of_week < 5:  # Weekdays
+            if 7 <= hour_of_day <= 18:
+                operational_factor = 1.0
+                if 9 <= hour_of_day <= 17:
+                    operational_factor = 1.5  # Peak business hours
+            else:
+                operational_factor = 0.2
+        else:  # Weekends
+            operational_factor = 0.1
             
-            # Daily environmental effects
-            daily_variation = 0.1 * np.sin(2 * np.pi * t + np.pi/6)
-            
-            # Seasonal drift (very slow)
-            seasonal_drift = 0.05 * np.sin(2 * np.pi * t / 365)
-            
-            # Random fluctuations
-            random_noise = np.random.normal(0, 0.08)
-            
-            # Occasional events (structural events, maintenance, etc.)
-            event_probability = 0.001  # Very rare
-            event_magnitude = 0.0
-            if random.random() < event_probability:
-                event_magnitude = np.random.normal(0, 0.5)
-            
-            components = [base_pressure, weather_cycle, daily_variation,
-                          seasonal_drift, random_noise, event_magnitude]
-            value = sum(components)
-            data.append(value)
-            
-        return data
+        # Daily cycle
+        daily_cycle = 0.3 * np.sin(2 * np.pi * hour_of_day / 24)
+        
+        # Random variation
+        noise = np.random.normal(0, 0.15)
+        
+        value = base_value * operational_factor + daily_cycle + noise
+        data.append(max(0, value))
+        
+    return data
+
+
+def _generate_sine_pattern(length: int, base_value: float, time: np.ndarray) -> List[float]:
+    """Generate sine wave pattern for structural monitoring."""
+    data = []
+    for i, t in enumerate(time):
+        # Primary structural resonance
+        primary_freq = base_value * 0.01
+        structural = 0.1 * np.sin(2 * np.pi * primary_freq * t / 24)
+        
+        # Daily environmental cycle
+        daily_cycle = 0.05 * np.sin(2 * np.pi * t / 24)
+        
+        # Rush hour effects
+        hour = t % 24
+        rush_factor = 1.0
+        if 7 <= hour <= 9 or 17 <= hour <= 19:
+            rush_factor = 1.5 + 0.3 * np.sin(2 * np.pi * (hour - 7) / 4)
+        
+        # Random vibrations
+        noise = np.random.normal(0, 0.02)
+        
+        base_component = base_value * 0.001
+        dynamic_component = (structural + daily_cycle) * rush_factor
+        value = base_component + dynamic_component + noise
+        data.append(max(0, value))
+        
+    return data
+
+
+def _generate_linear_pattern(length: int, base_value: float, time: np.ndarray) -> List[float]:
+    """Generate linear trend pattern for strain/displacement monitoring."""
+    data = []
+    base_strain = base_value * 0.1
+    
+    for i, t in enumerate(time):
+        # Long-term trend
+        long_term_trend = 0.01 * t / 24  # Per day
+        
+        # Daily thermal cycle
+        thermal_cycle = 0.5 * np.sin(2 * np.pi * t / 24 - np.pi/4)
+        
+        # Load effects
+        hour = t % 24
+        load_effect = 0.0
+        if 6 <= hour <= 22:
+            sin_component = np.sin(2 * np.pi * (hour - 6) / 16)
+            load_effect = 0.2 * (1 + 0.3 * sin_component)
+        
+        # Noise
+        noise = np.random.normal(0, 0.05)
+        
+        value = base_strain + long_term_trend + thermal_cycle + load_effect + noise
+        data.append(value)
+        
+    return data
+
+
+def _generate_default_pattern(length: int, base_value: float, time: np.ndarray) -> List[float]:
+    """Generate default mixed sensor pattern."""
+    import random
+    
+    data = []
+    base_pressure = base_value
+    
+    for i, t in enumerate(time):
+        # Weather-driven variations
+        weather_pattern = 2 * np.pi * t / 72 + random.random() * 2 * np.pi  # 3-day cycle
+        weather_cycle = 0.2 * np.sin(weather_pattern)
+        
+        # Daily environmental effects
+        daily_variation = 0.1 * np.sin(2 * np.pi * t / 24 + np.pi/6)
+        
+        # Random fluctuations
+        random_noise = np.random.normal(0, 0.08)
+        
+        # Occasional events
+        event_magnitude = 0.0
+        if random.random() < 0.001:
+            event_magnitude = np.random.normal(0, 0.5)
+        
+        value = base_pressure + weather_cycle + daily_variation + random_noise + event_magnitude
+        data.append(value)
+        
+    return data
 
 
 def generate_mock_domain_series(domain_type: str, length: int, num_samples: int) -> List[List[float]]:
