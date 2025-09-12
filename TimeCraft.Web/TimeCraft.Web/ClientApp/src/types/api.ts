@@ -20,7 +20,7 @@ export interface TagProgress extends GeneratedTag {
 }
 
 export interface GenerateTagsRequest {
-  text: string;
+  Text: string;
 }
 
 export interface GenerateTagsResponse {

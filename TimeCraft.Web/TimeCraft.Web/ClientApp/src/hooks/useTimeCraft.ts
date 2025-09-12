@@ -139,7 +139,7 @@ export const useTimeCraft = () => {
       console.log('Generating tags for description:', description);
       
       // Step 1: Generate tags
-      const tagsResponse = await timeCraftApi.generateTags({ text: description });
+      const tagsResponse = await timeCraftApi.generateTags({ Text: description });
       
       if (!tagsResponse.success || !tagsResponse.tags) {
         throw new Error(tagsResponse.message || 'Failed to generate tags');
