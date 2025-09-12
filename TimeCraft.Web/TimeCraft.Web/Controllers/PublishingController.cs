@@ -171,4 +171,100 @@ public class PublishingController : ControllerBase
             return StatusCode(500, "An error occurred while retrieving the publishing status");
         }
     }
+
+    [HttpPost("datasets/{id}/export-csv")]
+    public async Task<IActionResult> ExportDeltaFramesCsv(string id, [FromBody] ExportDeltaFramesCsvRequest? request = null)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            // Create request if not provided
+            request ??= new ExportDeltaFramesCsvRequest();
+            request.DatasetId = id;
+
+            _logger.LogInformation("Exporting OPC UA delta frames CSV for dataset {Id}", id);
+            
+            var result = await _publishingService.ExportDeltaFramesCsvAsync(request);
+            
+            if (result.FileContent == null)
+            {
+                return NotFound("No data available for export");
+            }
+
+            return File(result.FileContent, result.ContentType, result.FileName);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid request for CSV export of dataset {Id}", id);
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Operation error during CSV export of dataset {Id}", id);
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting OPC UA delta frames CSV for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while exporting the CSV file");
+        }
+    }
+
+    [HttpGet("datasets/{id}/export-csv")]
+    public async Task<IActionResult> ExportDeltaFramesCsvGet(string id, 
+        [FromQuery] bool useRelativeTimestamps = true,
+        [FromQuery] DateTime? startTime = null,
+        [FromQuery] DateTime? endTime = null,
+        [FromQuery] DateTime? referenceTime = null,
+        [FromQuery] string[]? tagFilter = null)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            var request = new ExportDeltaFramesCsvRequest
+            {
+                DatasetId = id,
+                UseRelativeTimestamps = useRelativeTimestamps,
+                StartTime = startTime,
+                EndTime = endTime,
+                ReferenceTime = referenceTime,
+                TagFilter = tagFilter?.ToList()
+            };
+
+            _logger.LogInformation("Exporting OPC UA delta frames CSV for dataset {Id} with relative timestamps: {UseRelative}", 
+                id, useRelativeTimestamps);
+            
+            var result = await _publishingService.ExportDeltaFramesCsvAsync(request);
+            
+            if (result.FileContent == null)
+            {
+                return NotFound("No data available for export");
+            }
+
+            return File(result.FileContent, result.ContentType, result.FileName);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid request for CSV export of dataset {Id}", id);
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Operation error during CSV export of dataset {Id}", id);
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting OPC UA delta frames CSV for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while exporting the CSV file");
+        }
+    }
 }

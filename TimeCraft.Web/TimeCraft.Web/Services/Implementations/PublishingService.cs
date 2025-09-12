@@ -209,4 +209,152 @@ public class PublishingService : IPublishingService
             RetryCount = record.RetryCount
         };
     }
+
+    public async Task<ExportDeltaFramesCsvResponse> ExportDeltaFramesCsvAsync(ExportDeltaFramesCsvRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.DatasetId))
+            {
+                throw new ArgumentException("Dataset ID is required", nameof(request));
+            }
+
+            var publishRecord = await GetPublishRecordAsync(request.DatasetId);
+            if (publishRecord == null)
+            {
+                throw new InvalidOperationException($"Dataset with ID {request.DatasetId} not found");
+            }
+
+            if (publishRecord.Tags == null || !publishRecord.Tags.Any())
+            {
+                throw new InvalidOperationException("No tags found in the dataset");
+            }
+
+            // Filter tags if specified
+            var tagsToExport = request.TagFilter != null && request.TagFilter.Any()
+                ? publishRecord.Tags.Where(tag => request.TagFilter.Contains(tag.TagName)).ToList()
+                : publishRecord.Tags;
+
+            if (!tagsToExport.Any())
+            {
+                throw new InvalidOperationException("No matching tags found for export");
+            }
+
+            // Set reference time for relative timestamps
+            var referenceTime = request.ReferenceTime ?? DateTime.UtcNow;
+
+            // Generate CSV content
+            var csvContent = GenerateDeltaFramesCsv(tagsToExport, publishRecord, request, referenceTime);
+            var fileContent = System.Text.Encoding.UTF8.GetBytes(csvContent);
+
+            // Generate filename with timestamp
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+            var fileName = $"opcua_deltaframes_{publishRecord.DatasetName}_{timestamp}.csv";
+
+            var totalRecords = tagsToExport.Sum(tag => tag.TimeSeriesData.Count);
+
+            return new ExportDeltaFramesCsvResponse
+            {
+                FileName = fileName,
+                FileContent = fileContent,
+                ContentType = "text/csv",
+                TotalRecords = totalRecords,
+                Message = $"Successfully exported {totalRecords} OPC UA delta frames for dataset '{publishRecord.DatasetName}'"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting delta frames CSV for dataset {DatasetId}", request.DatasetId);
+            throw;
+        }
+    }
+
+    private string GenerateDeltaFramesCsv(List<DatasetTag> tags, PublishRecord publishRecord, ExportDeltaFramesCsvRequest request, DateTime referenceTime)
+    {
+        var csv = new System.Text.StringBuilder();
+
+        // Write CSV header
+        if (request.UseRelativeTimestamps)
+        {
+            csv.AppendLine("RelativeTimeSeconds,OriginalTimestamp,TagName,NodeId,DisplayName,Value,DataType,StatusCode,SequenceNumber,DataSetWriterId");
+        }
+        else
+        {
+            csv.AppendLine("Timestamp,TagName,NodeId,DisplayName,Value,DataType,StatusCode,SequenceNumber,DataSetWriterId");
+        }
+
+        int sequenceNumber = 1;
+
+        // Process each tag and its time series data
+        foreach (var tag in tags)
+        {
+            if (tag.TimeSeriesData == null) continue;
+
+            for (int i = 0; i < tag.TimeSeriesData.Count; i++)
+            {
+                var dataPoint = tag.TimeSeriesData[i];
+                
+                // Generate timestamp based on index (since TimeSeriesDataPoint.Time might be a string identifier)
+                // Use the creation time of the dataset plus interval for each data point
+                var intervalMinutes = 5; // Default 5-minute intervals, can be configurable
+                var dataPointTimestamp = publishRecord.CreatedAt.AddMinutes(i * intervalMinutes);
+
+                // Apply time filtering if specified
+                if (request.StartTime.HasValue && dataPointTimestamp < request.StartTime.Value)
+                    continue;
+                if (request.EndTime.HasValue && dataPointTimestamp > request.EndTime.Value)
+                    continue;
+
+                // Create simulated OPC UA delta frame data
+                var nodeId = $"ns=2;s={tag.TagName}";
+                var displayName = tag.TagName;
+                var value = dataPoint.Value;
+                var dataType = GetDataType(value);
+                var statusCode = 0; // Good status
+                var dataSetWriterId = $"{publishRecord.DatasetName}_{tag.TagName}";
+
+                if (request.UseRelativeTimestamps)
+                {
+                    var relativeSeconds = (dataPointTimestamp - referenceTime).TotalSeconds;
+                    csv.AppendLine($"{relativeSeconds:F3},{dataPointTimestamp:yyyy-MM-dd HH:mm:ss.fff},{EscapeCsvValue(tag.TagName)},{EscapeCsvValue(nodeId)},{EscapeCsvValue(displayName)},{value},{EscapeCsvValue(dataType)},{statusCode},{sequenceNumber},{EscapeCsvValue(dataSetWriterId)}");
+                }
+                else
+                {
+                    csv.AppendLine($"{dataPointTimestamp:yyyy-MM-dd HH:mm:ss.fff},{EscapeCsvValue(tag.TagName)},{EscapeCsvValue(nodeId)},{EscapeCsvValue(displayName)},{value},{EscapeCsvValue(dataType)},{statusCode},{sequenceNumber},{EscapeCsvValue(dataSetWriterId)}");
+                }
+
+                sequenceNumber++;
+            }
+        }
+
+        return csv.ToString();
+    }
+
+    private static string GetDataType(object? value)
+    {
+        return value switch
+        {
+            double => "Double",
+            float => "Float",
+            int => "Int32",
+            long => "Int64",
+            bool => "Boolean",
+            string => "String",
+            _ => "Variant"
+        };
+    }
+
+    private static string EscapeCsvValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        // Escape CSV values that contain commas, quotes, or newlines
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+        {
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+
+        return value;
+    }
 }
