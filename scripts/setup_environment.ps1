@@ -47,8 +47,7 @@ if ($envExists) {
     if (-not (Invoke-SafeCommand "conda env update -f environment.yml --prune")) {
         Write-Host "⚠️  Warning: Failed to update conda environment" -ForegroundColor Yellow
     }
-}
-else {
+} else {
     Write-Host "📦 Creating new conda environment..." -ForegroundColor Cyan
     
     if (-not (Invoke-SafeCommand "conda env create -f environment.yml")) {
@@ -59,38 +58,32 @@ else {
     Write-Host "✅ Conda environment created successfully" -ForegroundColor Green
 }
 
-# Install BRIDGE requirements
-if (Test-Path "BRIDGE\requirements.txt") {
+# Install TimeCraft.Api requirements
+if (Test-Path "TimeCraft.Api\BRIDGE\requirements.txt") {
     Write-Host "📦 Installing BRIDGE requirements..." -ForegroundColor Cyan
     
-    if (-not (Invoke-SafeCommand "conda run -n timecraft pip install -r BRIDGE\requirements.txt")) {
+    if (-not (Invoke-SafeCommand "conda run -n timecraft pip install -r TimeCraft.Api\BRIDGE\requirements.txt")) {
         Write-Host "⚠️  Warning: Failed to install BRIDGE requirements" -ForegroundColor Yellow
-    }
-    else {
+    } else {
         Write-Host "✅ BRIDGE requirements installed" -ForegroundColor Green
     }
 }
 
 # Install additional packages
 Write-Host "📦 Installing additional packages..." -ForegroundColor Cyan
-$additionalPackages = @("fastapi", "uvicorn", "python-multipart", "jinja2", "aiofiles")
-
-foreach ($package in $additionalPackages) {
-    if (-not (Invoke-SafeCommand "conda run -n timecraft pip install $package")) {
-        Write-Host "⚠️  Warning: Failed to install $package" -ForegroundColor Yellow
-    }
+if (-not (Invoke-SafeCommand "conda run -n timecraft pip install fastapi uvicorn python-multipart jinja2 aiofiles")) {
+    Write-Host "⚠️  Warning: Failed to install additional packages" -ForegroundColor Yellow
+} else {
+    Write-Host "✅ Additional packages installed" -ForegroundColor Green
 }
-
-Write-Host "✅ Additional packages installed" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "🎉 Environment setup complete!" -ForegroundColor Green
 Write-Host ""
-Write-Host "To activate the environment manually:" -ForegroundColor Cyan
+Write-Host "To activate the environment, run:" -ForegroundColor Cyan
 Write-Host "  conda activate timecraft" -ForegroundColor White
 Write-Host ""
-Write-Host "To run TimeCraft:" -ForegroundColor Cyan
-Write-Host "  Press F5 in VS Code and select 'TimeCraft Full Stack'" -ForegroundColor White
+Write-Host "To start the API server, run:" -ForegroundColor Cyan
+Write-Host "  python TimeCraft.Api\TimeCraft.Api\main.py" -ForegroundColor White
 Write-Host ""
-
 Read-Host "Press Enter to continue"

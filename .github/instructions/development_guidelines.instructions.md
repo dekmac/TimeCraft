@@ -5,6 +5,8 @@ applyTo: '**'
 
 # TimeCraft Development Guidelines
 
+Always reason over the change you've been asked to make, plan what you're going to do and take the actions you need to take step by step.
+
 ## 🚀 Golden Rules
 
 These are **non-negotiable** coding standards that must be followed in this project.
@@ -53,6 +55,8 @@ These are **non-negotiable** coding standards that must be followed in this proj
 ### Test Naming
 - Use `Given_When_Then` syntax for test method names
 - Example: `Given_ValidScenario_When_GeneratingTags_Then_ReturnsExpectedTags()`
+- When asked to generate tests to verify functionality before and after a large change, ensure the "Before" tests all pass before making the change.
+- Make sure tests are comprehensive focusing on Valid,Invalid and extreme scenarios.
 
 ### Test Location
 - Place tests in `/tests/<platform>/<project>/` structure

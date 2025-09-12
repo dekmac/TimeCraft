@@ -88,12 +88,61 @@ Compared to other methods, TarDiff consistently generates data that leads to bet
 
 
 
-## 🚀Quick Start
-### 1. Environment setups 
-Clone this repository and setup enviroment.
+## 🚀 Quick Start
+
+### 1. Environment Setup 
+
+Clone this repository and set up the environment:
+
+#### Option A: Simple Setup (Python venv)
 ```bash
-conda env create -f environment.yaml
+git clone https://github.com/dekmac/TimeCraft.git
+cd TimeCraft
+python scripts/setup_simple.py
 ```
+
+#### Option B: Full Setup (Conda - Recommended)
+```bash
+git clone https://github.com/dekmac/TimeCraft.git
+cd TimeCraft
+# Windows
+scripts\setup_environment.bat
+# Or PowerShell
+powershell -ExecutionPolicy Bypass -File scripts\setup_environment.ps1
+```
+
+#### VS Code Integration
+For development with VS Code:
+1. Open the project in VS Code
+2. Press `F5` to start full-stack debugging (both Python API and .NET React app)
+3. Or run setup tasks: `Ctrl+Shift+P` → "Tasks: Run Task" → Choose setup option
+
+### 2. Start the Application
+
+#### Python API Only
+```bash
+# Activate environment
+conda activate timecraft  # or: venv\Scripts\activate
+
+# Start API server
+python TimeCraft.Api/TimeCraft.Api/main.py
+```
+
+#### Full Stack (.NET + Python)
+```bash
+# Press F5 in VS Code, or manually:
+# Terminal 1: Start Python API
+python TimeCraft.Api/TimeCraft.Api/main.py
+
+# Terminal 2: Start .NET React app
+cd TimeCraft.Web/TimeCraft.Web
+dotnet run
+```
+
+Access the application:
+- **Python API**: http://localhost:8080
+- **.NET React App**: https://localhost:7154 or http://localhost:5173
+- **API Documentation**: http://localhost:8080/swagger
 
 ### 2. Preparation for text controlled generation (Optional)  
 #### 2.1 Get text templates 

@@ -5,11 +5,11 @@
             "name": "TimeCraft API Server",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/api_server.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/TimeCraft.Api/main.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/TimeCraft.Api",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": [],
             "preLaunchTask": "setup-timecraft-environment",
@@ -19,7 +19,7 @@
             "name": "TimeCraft Web Server",
             "type": "debugpy",
             "request": "launch", 
-            "program": "${workspaceFolder}/serve.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/scripts/serve.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "env": {
@@ -37,7 +37,7 @@
             "name": "TimeCraft Training & Inference",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/train_inference.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/training/train_inference.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "env": {
@@ -50,11 +50,11 @@
             "name": "TimeDP Training",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/TimeDP/main_train.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/TimeDP/main_train.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/TimeDP",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/TimeDP",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": [
                 "--config", "configs/mimic_icustay_base.yaml"
@@ -64,11 +64,11 @@
             "name": "TimeDP Visualization",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/TimeDP/visualize.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/TimeDP/visualize.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/TimeDP",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/TimeDP",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": []
         },
@@ -76,11 +76,11 @@
             "name": "BRIDGE Text Generation",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/BRIDGE/self_refine_main.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/BRIDGE/self_refine_main.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/BRIDGE",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/BRIDGE",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": []
         },
@@ -88,11 +88,11 @@
             "name": "BRIDGE LLM Text-to-TS",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/BRIDGE/llm4text2ts.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/BRIDGE/llm4text2ts.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/BRIDGE",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/BRIDGE",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": []
         },
@@ -100,11 +100,11 @@
             "name": "TarDiff Training",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/TarDiff/train_main.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/TarDiff/train_main.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/TarDiff",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/TarDiff",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": [
                 "--config", "configs/text_control.yaml"
@@ -114,11 +114,11 @@
             "name": "TarDiff Generation",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/TarDiff/guidance_generation.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/TarDiff/guidance_generation.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/TarDiff",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/TarDiff",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": []
         },
@@ -126,11 +126,11 @@
             "name": "DiGA Training",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/DiGA/train.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/DiGA/train.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/DiGA",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/DiGA",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": []
         },
@@ -138,11 +138,11 @@
             "name": "DiGA Generation",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/DiGA/generate.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/DiGA/generate.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/DiGA",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/DiGA",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": []
         },
@@ -150,11 +150,11 @@
             "name": "Diffusion Training",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/diffusion/main.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/diffusion/main.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/diffusion",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/diffusion",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": [
                 "--config", "configs/mimic_icustay_base.yaml"
@@ -164,11 +164,11 @@
             "name": "Diffusion Inference",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/diffusion/inference.py",
+            "program": "${workspaceFolder}/TimeCraft.Api/diffusion/inference.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/diffusion",
+            "cwd": "${workspaceFolder}/TimeCraft.Api/diffusion",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}/TimeCraft.Api"
             },
             "args": []
         },
@@ -177,19 +177,40 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build-dotnet-app",
-            "program": "${workspaceFolder}/TimeCraft.Web/TimeCraft.Web/bin/Debug/net8.0/TimeCraft.Web.dll",
+            "program": "${workspaceFolder}/TimeCraft.Web/TimeCraft.Web/bin/Debug/net9.0/TimeCraft.Web.dll",
             "args": [],
             "cwd": "${workspaceFolder}/TimeCraft.Web/TimeCraft.Web",
             "stopAtEntry": false,
+            "console": "integratedTerminal",
             "serverReadyAction": {
                 "action": "openExternally",
                 "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
             },
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "https://localhost:5001;http://localhost:5000"
             },
             "sourceFileMap": {
                 "/Views": "${workspaceFolder}/Views"
+            }
+        },
+        {
+            "name": ".NET React App (dotnet run)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-dotnet-app",
+            "program": "dotnet",
+            "args": ["run"],
+            "cwd": "${workspaceFolder}/TimeCraft.Web/TimeCraft.Web",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "https://localhost:5001;http://localhost:5000"
             }
         }
     ],
@@ -203,6 +224,17 @@
             "presentation": {
                 "group": "TimeCraft",
                 "order": 1
+            }
+        },
+        {
+            "name": "TimeCraft Full Stack (.NET React - Alt)",
+            "configurations": [
+                "TimeCraft API Server",
+                ".NET React App (dotnet run)"
+            ],
+            "presentation": {
+                "group": "TimeCraft",
+                "order": 2
             }
         },
         {

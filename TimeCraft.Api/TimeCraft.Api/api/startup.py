@@ -7,9 +7,12 @@ import sys
 import traceback
 
 # Add project root to Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'BRIDGE'))
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'diffusion'))
+# We're in TimeCraft.Api/TimeCraft.Api/api/startup.py
+# ML components are in TimeCraft.Api/ (three levels up)
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(project_root)
+sys.path.append(os.path.join(project_root, 'BRIDGE'))
+sys.path.append(os.path.join(project_root, 'diffusion'))
 
 
 def log_startup_environment():

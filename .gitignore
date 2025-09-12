@@ -19,3 +19,5 @@ venv/
 # Visual Studio / VS Code
 .vs/
 .vscode/settings.json
+
+appsettings.Development.json

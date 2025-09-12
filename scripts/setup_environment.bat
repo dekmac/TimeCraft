@@ -33,10 +33,10 @@ if %errorlevel% equ 0 (
     echo ✅ Conda environment created successfully
 )
 
-REM Install BRIDGE requirements
-if exist "BRIDGE\requirements.txt" (
+REM Install TimeCraft.Api requirements
+if exist "TimeCraft.Api\BRIDGE\requirements.txt" (
     echo 📦 Installing BRIDGE requirements...
-    conda run -n timecraft pip install -r BRIDGE\requirements.txt
+    conda run -n timecraft pip install -r TimeCraft.Api\BRIDGE\requirements.txt
     if %errorlevel% neq 0 (
         echo ⚠️  Warning: Failed to install BRIDGE requirements
     ) else (
@@ -48,7 +48,7 @@ REM Install additional packages
 echo 📦 Installing additional packages...
 conda run -n timecraft pip install fastapi uvicorn python-multipart jinja2 aiofiles
 if %errorlevel% neq 0 (
-    echo ⚠️  Warning: Some additional packages failed to install
+    echo ⚠️  Warning: Failed to install additional packages
 ) else (
     echo ✅ Additional packages installed
 )
@@ -56,10 +56,10 @@ if %errorlevel% neq 0 (
 echo.
 echo 🎉 Environment setup complete!
 echo.
-echo To activate the environment manually:
+echo To activate the environment, run:
 echo   conda activate timecraft
 echo.
-echo To run TimeCraft:
-echo   Press F5 in VS Code and select 'TimeCraft Full Stack'
+echo To start the API server, run:
+echo   python TimeCraft.Api\TimeCraft.Api\main.py
 echo.
 pause

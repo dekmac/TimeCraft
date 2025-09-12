@@ -9,7 +9,7 @@ opens the UI in the default web browser.
 Usage:
     python serve.py
 
-The server will start on port 8000 and serve files from the current directory.
+The server will start on port 8001 and serve files from the current directory.
 """
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler

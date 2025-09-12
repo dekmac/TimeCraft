@@ -741,87 +741,6 @@ def generate_tag_names_with_llm(description: str, num_tags: int, chat_llm) -> Li
         return generate_tag_names_from_description(description, num_tags, chat_llm)
 
 
-def analyze_scenario_context(description: str, scenario: str = None) -> dict:
-    """
-    Analyze the scenario description to extract detailed context for realistic timeseries generation.
-    """
-    combined_text = f"{description} {scenario if scenario else ''}".lower()
-    
-    context = {
-        "facility_type": "general_industrial",
-        "operational_schedule": "24/7",
-        "occupancy_patterns": {},
-        "environmental_factors": [],
-        "special_events": [],
-        "building_characteristics": {},
-        "expected_sensor_ranges": {}
-    }
-    
-    # Detect facility type
-    if any(word in combined_text for word in ["building", "historic", "heritage", "monument", "structure"]):
-        context["facility_type"] = "historic_building"
-        context["building_characteristics"] = {
-            "age": "historic",
-            "materials": "traditional",
-            "thermal_mass": "high",
-            "structural_sensitivity": "high"
-        }
-        
-        # Historic buildings typically have visitor schedules
-        if "tourist" in combined_text or "visitor" in combined_text:
-            context["operational_schedule"] = "visitor_hours"
-            context["occupancy_patterns"] = {
-                "peak_hours": "10:00-16:00",
-                "peak_days": "weekends",
-                "seasonal_variation": "high",
-                "tourist_season": "summer"
-            }
-            
-    elif any(word in combined_text for word in ["hospital", "medical", "clinic"]):
-        context["facility_type"] = "healthcare"
-        context["operational_schedule"] = "24/7_critical"
-        
-    elif any(word in combined_text for word in ["school", "university", "education"]):
-        context["facility_type"] = "educational"
-        context["operational_schedule"] = "weekday_hours"
-        
-    elif any(word in combined_text for word in ["office", "commercial", "business"]):
-        context["facility_type"] = "commercial"
-        context["operational_schedule"] = "business_hours"
-        
-    elif any(word in combined_text for word in ["factory", "manufacturing", "plant", "production"]):
-        context["facility_type"] = "industrial"
-        context["operational_schedule"] = "shift_based"
-    
-    # Detect environmental factors
-    if "humid" in combined_text:
-        context["environmental_factors"].append("humidity_sensitive")
-    if "temperature" in combined_text or "thermal" in combined_text:
-        context["environmental_factors"].append("temperature_sensitive")
-    if "wind" in combined_text or "weather" in combined_text:
-        context["environmental_factors"].append("weather_sensitive")
-    if "vibration" in combined_text or "seismic" in combined_text:
-        context["environmental_factors"].append("vibration_monitoring")
-    
-    # Detect special events or conditions
-    if "tourist" in combined_text or "seasonal" in combined_text:
-        context["special_events"].append("seasonal_variation")
-    if "maintenance" in combined_text:
-        context["special_events"].append("maintenance_periods")
-    if "event" in combined_text or "gathering" in combined_text:
-        context["special_events"].append("special_events")
-        
-    # Detect specific monitoring requirements
-    if "footfall" in combined_text or "foot traffic" in combined_text:
-        context["expected_sensor_ranges"]["footfall"] = {
-            "units": "people/hour",
-            "typical_range": "0-200",
-            "peak_multiplier": 3.0
-        }
-        
-    return context
-
-
 def create_timeseries_generation_prompt(
     tag_name: str,
     description: str,
@@ -831,185 +750,47 @@ def create_timeseries_generation_prompt(
     chat_llm = None
 ) -> str:
     """
-    Create a sophisticated prompt for realistic domain-aware timeseries generation with deep scenario analysis.
+    Create a sophisticated prompt for realistic domain-aware timeseries generation.
     """
-    # Analyze scenario context in detail
-    scenario_context = analyze_scenario_context(description, scenario)
-    
     # Parse device type from tag name for specialized prompting
     device_info = detect_device_type_from_tag(tag_name)
     device_prompt = get_device_specific_prompt(device_info, tag_name, chat_llm)
     
-    # Build contextual information
     scenario_text = f"\nScenario Context: {scenario}" if scenario else ""
     time_period_text = f"\nTime Period: {time_period}" if time_period else ""
     
-    # Create facility-specific operational patterns
-    operational_guidance = generate_operational_patterns(scenario_context, sequence_length)
-    
-    # Create sensor-specific realistic ranges and behaviors
-    sensor_guidance = generate_sensor_specific_guidance(tag_name, device_info, scenario_context)
-    
-    return f"""You are generating realistic time series data for a monitoring system in a {scenario_context['facility_type']} environment.
+    return f"""You are generating realistic time series data for an industrial monitoring system.
 
 SENSOR DETAILS:
 Tag Name: {tag_name}
 System Description: {description}{scenario_text}{time_period_text}
-Facility Type: {scenario_context['facility_type']}
-Operational Schedule: {scenario_context['operational_schedule']}
 
 {device_prompt}
 
-FACILITY-SPECIFIC CONTEXT:
-{operational_guidance}
-
-SENSOR-SPECIFIC GUIDANCE:
-{sensor_guidance}
-
 DATA GENERATION REQUIREMENTS:
-1. Generate exactly {sequence_length} numerical values representing sequential hourly measurements
-2. CRITICAL: Follow the facility-specific operational patterns described above
-3. Include realistic measurement characteristics:
-   - Appropriate noise levels and measurement precision for this sensor type
-   - Natural drift and baseline variations reflecting real-world conditions
-   - Occasional data spikes or anomalies (5-10% of readings) related to operational events
-   - Environmental influences based on facility context (temperature, humidity, occupancy)
+1. Generate exactly {sequence_length} numerical values
+2. Include realistic measurement characteristics:
+   - Appropriate noise levels and measurement precision
+   - Natural drift and baseline variations
+   - Occasional data spikes or anomalies (5-10% of readings)
+   - Environmental influences (temperature, humidity, pressure)
+3. Temporal patterns:
+   - Industry-appropriate daily/operational cycles
+   - Random variations with realistic autocorrelation
+   - Gradual trends (equipment aging, process drift)
+   - Event responses (load changes, environmental factors)
+4. Data quality simulation:
+   - 2-3% outliers or measurement errors
+   - Occasional brief periods of elevated/reduced activity
+   - Realistic sensor behavior (not perfectly smooth)
+5. Engineering realism:
+   - Values should reflect real-world industrial measurements
+   - Include both positive and negative values where appropriate
+   - Show process response to operational and environmental conditions
 
-4. Temporal patterns MUST reflect:
-   - Daily operational cycles specific to this facility type
-   - Weekly patterns (weekday vs weekend differences)
-   - Seasonal influences if mentioned in scenario
-   - Event-driven responses (occupancy changes, environmental factors)
-   - Realistic autocorrelation and measurement continuity
-
-5. Data quality simulation:
-   - 2-3% outliers or measurement errors with realistic magnitudes
-   - Brief periods of elevated/reduced activity matching operational patterns
-   - Sensor behavior that reflects actual physics and engineering reality
-
-6. Engineering and contextual realism:
-   - Values must be appropriate for this specific sensor type and application
-   - Show realistic response to described operational and environmental conditions
-   - Include both gradual changes and event responses as appropriate
-   - Reflect the specific characteristics of this facility type and usage pattern
-
-CRITICAL OUTPUT REQUIREMENTS:
-- Return exactly {sequence_length} comma-separated numerical values ONLY
-- No additional text, explanations, or formatting
-- Values should tell a realistic story that matches the described scenario
-- Each value represents one hour of monitoring data"""
-
-
-def generate_operational_patterns(scenario_context: dict, sequence_length: int) -> str:
-    """Generate facility-specific operational pattern guidance."""
-    facility_type = scenario_context.get("facility_type", "general_industrial")
-    operational_schedule = scenario_context.get("operational_schedule", "24/7")
-    
-    if facility_type == "historic_building":
-        if sequence_length <= 24:
-            pattern = """HISTORIC BUILDING DAILY PATTERNS (24 hours):
-- Hours 1-8 (Night/Early Morning): Minimal occupancy, baseline readings, thermal recovery
-- Hours 9-10 (Opening): Gradual increase in activity, systems activation
-- Hours 11-16 (Peak Visitor Hours): High occupancy, elevated readings, maximum HVAC load
-- Hours 17-18 (Closing): Activity decrease, systems normalizing
-- Hours 19-24 (Evening/Night): Minimal activity, reduced HVAC, nighttime baseline
-- HVAC sensors: Higher activity during visitor hours, setback during closed periods
-- Footfall sensors: Peak 11-15, minimal nights/early morning
-- Environmental sensors: Respond to occupancy changes and outdoor conditions"""
-        else:
-            pattern = f"""HISTORIC BUILDING WEEKLY PATTERNS ({sequence_length} hours):
-- Hours 1-120 (Mon-Fri): Moderate weekday visitor patterns
-  * Daily peaks: Hours 9-17 each day (visitors)
-  * Lunch peak: Hours 12-13 slightly higher
-  * Evening: Hours 18-24 minimal activity
-- Hours 121-168 (Weekend): Higher visitor volumes
-  * Saturday: 50% higher peak visitor loads than weekdays
-  * Sunday: 30% higher than weekday average
-- Environmental patterns: Respond to increased weekend occupancy
-- HVAC systems: Weekend peaks higher than weekday peaks
-- Footfall: Dramatic weekday/weekend differences"""
-    
-    elif facility_type == "commercial":
-        pattern = """COMMERCIAL BUILDING PATTERNS:
-- Hours 1-6: Minimal occupancy, night setback mode
-- Hours 7-9: Arrival period, systems ramp-up
-- Hours 10-17: Full occupancy, normal operations
-- Hours 18-19: Departure period, systems wind-down
-- Hours 20-24: Minimal occupancy, evening setback"""
-    
-    elif facility_type == "industrial":
-        pattern = """INDUSTRIAL FACILITY PATTERNS:
-- Continuous 24/7 operations with shift changes
-- Shift changes at hours 6, 14, 22 (slight activity changes)
-- Higher production during day shifts (6-22)
-- Maintenance windows typically nights/weekends"""
-        
-    else:
-        pattern = """GENERAL OPERATIONAL PATTERNS:
-- Daily cycles reflecting normal operational schedules
-- Higher activity during business hours
-- Reduced activity during nights and weekends
-- Regular maintenance and operational cycles"""
-    
-    # Add environmental factors
-    env_factors = scenario_context.get("environmental_factors", [])
-    if env_factors:
-        pattern += f"\n\nENVIRONMENTAL INFLUENCES: {', '.join(env_factors)}"
-    
-    return pattern
-
-
-def generate_sensor_specific_guidance(tag_name: str, device_info: dict, scenario_context: dict) -> str:
-    """Generate sensor-specific realistic behavior guidance based on context."""
-    sensor_type = device_info.get('type', 'generic')
-    facility_type = scenario_context.get('facility_type', 'general_industrial')
-    
-    guidance = f"SENSOR TYPE: {sensor_type.title()} ({tag_name})\n"
-    
-    if "hvac" in tag_name.lower() or "temp" in tag_name.lower():
-        if facility_type == "historic_building":
-            guidance += """- Baseline: 18-22°C when occupied, 15-25°C setback when closed
-- Thermal mass effects: Gradual temperature changes due to old building materials
-- Visitor load response: +2-4°C increase during peak visitor hours
-- Daily cycle: Slower thermal response than modern buildings
-- Noise level: ±0.2°C measurement precision
-- Seasonal drift: Outdoor temperature influence"""
-            
-    elif "humid" in tag_name.lower():
-        if facility_type == "historic_building":
-            guidance += """- Target range: 45-65% RH for artifact preservation
-- Occupancy response: +5-15% RH during visitor peaks (breathing, body heat)
-- Weather sensitivity: Responds to outdoor humidity changes
-- HVAC interaction: Correlates with temperature control
-- Daily patterns: Higher during occupancy, lower at night
-- Measurement precision: ±2% RH"""
-            
-    elif "footfall" in tag_name.lower() or "people" in tag_name.lower():
-        if facility_type == "historic_building":
-            guidance += """- Weekday averages: 5-25 people/hour during open hours
-- Weekend peaks: 15-75 people/hour (2-3x weekday levels)
-- Peak periods: 11:00-15:00 highest visitor density
-- Zero readings: During closed hours (nights, early morning)
-- Special events: Occasional spikes to 100-150 people/hour
-- Measurement: Discrete counts, realistic visitor flow patterns"""
-    
-    elif "vibration" in tag_name.lower() or "seismic" in tag_name.lower():
-        if facility_type == "historic_building":
-            guidance += """- Baseline: 0.05-0.2 mm/s structural vibration
-- Traffic influence: Higher during rush hours (7-9AM, 5-7PM)
-- Footfall correlation: Slight increase during visitor hours
-- Weather response: Wind-induced vibrations during storms
-- Measurement precision: ±0.01 mm/s
-- Event responses: Occasional spikes from nearby construction/traffic"""
-    
-    else:
-        guidance += f"""- Typical range: {device_info.get('typical_range', 'context-dependent')}
-- Units: {device_info.get('units', 'varies')}
-- Application context: {facility_type} environment
-- Operational influence: Responds to facility usage patterns
-- Environmental factors: Temperature, humidity, occupancy effects"""
-    
-    return guidance
+OUTPUT FORMAT:
+Return exactly {sequence_length} comma-separated numerical values representing sequential measurements.
+No additional text, explanations, or formatting - just the raw numerical data."""
 
 
 def detect_device_type_from_tag(tag_name: str) -> dict:
@@ -1287,14 +1068,7 @@ def generate_timeseries_with_llm(tag_name: str, description: str,
         import traceback
         print(f"   Full traceback:")
         traceback.print_exc()
-        print(f"🔄 Falling back to enhanced scenario-aware mock data for {tag_name}")
-        
-        # Create context for scenario-aware mock generation
-        context = {
-            "scenario_type": "historic_building" if "building" in description.lower() else "general",
-            "sensor_type": tag_name.lower(),
-            "facility_type": "historic_building" if "historic" in description.lower() else "general"
-        }
+        print(f"🔄 Falling back to mock data generation for {tag_name}")
         
         # Determine pattern based on tag name to generate more realistic data
         if "temperature" in tag_name.lower():
@@ -1310,7 +1084,7 @@ def generate_timeseries_with_llm(tag_name: str, description: str,
             pattern = "default"
             base = 50.0 + (tag_index * 20.0)
             
-        return generate_mock_timeseries(sequence_length, pattern, base, context)
+        return generate_mock_timeseries(sequence_length, pattern, base)
 
 
 def generate_tag_names_from_description(description: str, num_tags: int, chat_llm=None) -> list:
@@ -1709,14 +1483,8 @@ def handle_generate_single_timeseries(request: SingleTimeSeriesRequest, bridge_t
                 bridge_text2ts_available = False
         
         if not bridge_text2ts_available:
-            print(f"Generating timeseries for {request.tag_name} with enhanced scenario-aware mock data")
-            # Fallback to enhanced scenario-aware mock data generation
-            context = {
-                "scenario_type": "historic_building" if "building" in request.text_description.lower() else "general",
-                "sensor_type": request.tag_name.lower(),
-                "facility_type": "historic_building" if "historic" in request.text_description.lower() else "general"
-            }
-            
+            print(f"Generating timeseries for {request.tag_name} with mock data")
+            # Fallback to mock data generation
             patterns = ["default", "sine", "linear"]
             pattern = patterns[tag_index % len(patterns)]
             base_value = 50.0 + (tag_index * 20.0)
@@ -1724,10 +1492,9 @@ def handle_generate_single_timeseries(request: SingleTimeSeriesRequest, bridge_t
             timeseries_data = generate_mock_timeseries(
                 request.sequence_length,
                 pattern,
-                base_value,
-                context
+                base_value
             )
-            generation_method = "enhanced_mock"
+            generation_method = "mock"
         
         # Step 3: Prepare response
         response_data = {

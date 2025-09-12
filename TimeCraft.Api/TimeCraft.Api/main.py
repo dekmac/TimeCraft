@@ -23,11 +23,11 @@ from fastapi.responses import JSONResponse, FileResponse
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    print("📄 Loaded environment variables from .env file")
+    print("Loaded environment variables from .env file")
 except ImportError:
-    print("⚠️  python-dotenv not installed, using system environment variables")
+    print("python-dotenv not installed, using system environment variables")
 except Exception as e:
-    print(f"⚠️  Could not load .env file: {e}")
+    print(f"Could not load .env file: {e}")
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
