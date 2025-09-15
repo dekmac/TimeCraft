@@ -43,7 +43,7 @@ DOMAIN-SPECIFIC EXAMPLES:
 - Chemical Plant: REACTOR_TEMP_R101, DISTILLATION_PRESS_C201, PUMP_FLOW_P301
 
 REQUIREMENTS:
-1. Generate exactly {num_tags} realistic tag names
+1. Generate exactly {num_tags} realistic tag names with units
 2. Make tags specific to the scenario described
 3. Use diverse measurement types appropriate for the domain
 4. Include varied equipment/location names relevant to the scenario
@@ -51,7 +51,11 @@ REQUIREMENTS:
 6. Ensure tag names reflect the actual monitoring needs of that industry
 7. Be creative but realistic - think about what sensors would actually be needed
 
-Return only the tag names separated by commas, no additional text or explanations."""
+OUTPUT FORMAT:
+For each tag, provide: TAG_NAME|UNIT|DESCRIPTION
+Example: REACTOR_TEMP_R101|°C|Reactor R101 temperature sensor
+
+Return exactly {num_tags} lines, each with TAG_NAME|UNIT|DESCRIPTION format."""
 
 
 def create_tag_reflection_prompt(original_description: str, generated_tags: List[str], 
