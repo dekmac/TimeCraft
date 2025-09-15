@@ -172,6 +172,34 @@ public class PublishingController : ControllerBase
         }
     }
 
+    [HttpPost("datasets/{id}/force-retry")]
+    public async Task<ActionResult> ForceRetryDataset(string id)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            _logger.LogInformation("Force retry requested for dataset {Id}", id);
+            
+            var success = await _publishingService.ForceRetryDatasetAsync(id);
+            
+            if (!success)
+            {
+                return NotFound($"Dataset with ID {id} not found or could not be reset for retry");
+            }
+
+            return Ok(new { message = "Dataset has been reset and will be retried automatically", datasetId = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error forcing retry for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while forcing retry for the dataset");
+        }
+    }
+
     [HttpPost("datasets/{id}/export-csv")]
     public async Task<IActionResult> ExportDeltaFramesCsv(string id, [FromBody] ExportDeltaFramesCsvRequest? request = null)
     {

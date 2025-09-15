@@ -7,6 +7,7 @@ export const PublishedDatasets: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [retryingDatasets, setRetryingDatasets] = useState<Set<string>>(new Set());
 
   const loadDatasets = async () => {
     try {
@@ -25,6 +26,28 @@ export const PublishedDatasets: React.FC = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadDatasets();
+  };
+
+  const handleForceRetry = async (datasetId: string, datasetName: string) => {
+    try {
+      setRetryingDatasets(prev => new Set(prev).add(datasetId));
+      
+      await timeCraftApi.forceRetryDataset(datasetId);
+      
+      // Refresh datasets to show updated status
+      await loadDatasets();
+      
+      console.log(`Force retry initiated for dataset: ${datasetName}`);
+    } catch (err) {
+      console.error('Error forcing retry:', err);
+      setError(`Failed to force retry for dataset "${datasetName}". Please try again.`);
+    } finally {
+      setRetryingDatasets(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(datasetId);
+        return newSet;
+      });
+    }
   };
 
   useEffect(() => {
@@ -180,6 +203,28 @@ export const PublishedDatasets: React.FC = () => {
               {dataset.errorMessage && (
                 <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
                   <strong>Error:</strong> {dataset.errorMessage}
+                </div>
+              )}
+
+              {/* Action buttons for failed datasets */}
+              {dataset.status === 'Failed' && (
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => handleForceRetry(dataset.id, dataset.datasetName)}
+                    disabled={retryingDatasets.has(dataset.id)}
+                    className="px-4 py-2 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {retryingDatasets.has(dataset.id) ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Retrying...
+                      </>
+                    ) : (
+                      <>
+                        🔄 Force Retry
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>

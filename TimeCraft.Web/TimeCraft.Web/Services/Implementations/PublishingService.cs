@@ -154,6 +154,41 @@ public class PublishingService : IPublishingService
         }
     }
 
+    public async Task<bool> ForceRetryDatasetAsync(string id)
+    {
+        try
+        {
+            var publishRecord = await GetPublishRecordAsync(id);
+            
+            if (publishRecord == null)
+            {
+                _logger.LogWarning("Publish record {Id} not found for force retry", id);
+                return false;
+            }
+
+            // Reset the publish record for retry
+            publishRecord.Status = PublishingStatus.Pending;
+            publishRecord.RetryCount = 0;
+            publishRecord.ErrorMessage = null;
+            publishRecord.PublishedDataPoints = 0;
+            publishRecord.CurrentSequenceNumber = 1;
+            publishRecord.PublishedAt = null;
+
+            // Save the updated record
+            await UpdatePublishRecordAsync(publishRecord);
+
+            _logger.LogInformation("Force retry initiated for dataset {DatasetName} (ID: {Id})", 
+                publishRecord.DatasetName, id);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error forcing retry for dataset {Id}", id);
+            return false;
+        }
+    }
+
     private async Task<List<PublishRecord>> GetAllPublishRecordsAsync()
     {
         var records = new List<PublishRecord>();

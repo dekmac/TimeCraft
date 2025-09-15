@@ -103,6 +103,11 @@ class TimeCraftApiService {
     const response = await this.api.get<PublishingStatusInfo>(`/publishing/datasets/${id}/status`);
     return response.data;
   }
+
+  async forceRetryDataset(id: string): Promise<{ message: string; datasetId: string }> {
+    const response = await this.api.post<{ message: string; datasetId: string }>(`/publishing/datasets/${id}/force-retry`);
+    return response.data;
+  }
 }
 
 export const timeCraftApi = new TimeCraftApiService();
