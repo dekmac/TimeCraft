@@ -10,4 +10,5 @@ public interface IPublishingService
     Task UpdatePublishRecordAsync(PublishRecord publishRecord);
     Task<PublishRecord?> GetPublishRecordAsync(string id);
     Task<List<PublishRecord>> GetPendingPublishRecordsAsync();
+    Task<ExportDeltaFramesCsvResponse> ExportDeltaFramesCsvAsync(ExportDeltaFramesCsvRequest request);
 }
