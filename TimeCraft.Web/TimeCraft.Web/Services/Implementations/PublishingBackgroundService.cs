@@ -30,6 +30,7 @@ public class PublishingBackgroundService : BackgroundService
             try
             {
                 await ProcessPendingPublishRecordsAsync(stoppingToken);
+                await ProcessActiveStreamingDatasetsAsync(stoppingToken);
             }
             catch (Exception ex)
             {
@@ -37,7 +38,7 @@ public class PublishingBackgroundService : BackgroundService
             }
 
             // Wait before checking for more pending records
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
 
         _logger.LogInformation("Publishing background service stopped");
@@ -137,6 +138,103 @@ public class PublishingBackgroundService : BackgroundService
             catch (Exception updateEx)
             {
                 _logger.LogError(updateEx, "Error updating failed publish record {PublishId}", record.Id);
+            }
+        }
+    }
+
+    private async Task ProcessActiveStreamingDatasetsAsync(CancellationToken cancellationToken)
+    {
+        using var scope = _serviceScopeFactory.CreateScope();
+        var publishingService = scope.ServiceProvider.GetRequiredService<IPublishingService>();
+        var opcUaPublisher = scope.ServiceProvider.GetRequiredService<IOpcUaDeltaFramePublisher>();
+
+        var allRecords = await publishingService.GetAllPublishRecordsAsync();
+        var activeStreamingRecords = allRecords.Where(r => 
+            r.StreamConfig != null && 
+            r.StreamConfig.IsActive &&
+            (r.StreamConfig.Mode == PublishingMode.Loop || r.StreamConfig.Mode == PublishingMode.RealTimeStream) &&
+            r.Status == PublishingStatus.Completed
+        ).ToList();
+
+        foreach (var record in activeStreamingRecords)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            await ProcessStreamingDatasetAsync(record, publishingService, opcUaPublisher, cancellationToken);
+        }
+    }
+
+    private async Task ProcessStreamingDatasetAsync(
+        PublishRecord record, 
+        IPublishingService publishingService, 
+        IOpcUaDeltaFramePublisher opcUaPublisher,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (record.StreamConfig == null || record.Tags == null) return;
+            if (!Guid.TryParse(record.Id, out var recordGuid)) return;
+
+            var streamConfig = record.StreamConfig;
+            var totalDataPoints = record.Tags.Max(tag => tag.TimeSeriesData.Count);
+            
+            // Check if we should send the next data point
+            var lastUpdate = streamConfig.PausedAt ?? DateTime.UtcNow.AddMinutes(-1);
+            var timeSinceLastUpdate = DateTime.UtcNow - lastUpdate;
+            var effectiveInterval = TimeSpan.FromMilliseconds(streamConfig.StreamIntervalMs / streamConfig.StreamSpeed);
+            
+            if (timeSinceLastUpdate < effectiveInterval)
+            {
+                return; // Not time for next update yet
+            }
+
+            // Get current position
+            var currentPosition = streamConfig.CurrentStreamPosition;
+            
+            // Check if we've reached the end
+            if (currentPosition >= totalDataPoints)
+            {
+                if (streamConfig.Mode == PublishingMode.Loop && 
+                    (!streamConfig.LoopCycles.HasValue || streamConfig.CurrentCycle < streamConfig.LoopCycles.Value))
+                {
+                    // Reset to beginning for next loop cycle
+                    currentPosition = 0;
+                    streamConfig.CurrentCycle++;
+                    _logger.LogInformation("Starting loop cycle {Cycle} for dataset {DatasetName}", 
+                        streamConfig.CurrentCycle, record.DatasetName);
+                }
+                else
+                {
+                    // Stop streaming
+                    streamConfig.IsActive = false;
+                    await publishingService.UpdateStreamingStatsAsync(recordGuid, false);
+                    _logger.LogInformation("Streaming completed for dataset {DatasetName}", record.DatasetName);
+                    return;
+                }
+            }
+
+            // For now, just simulate progress updates
+            var pointsSent = Math.Min(currentPosition + 1, totalDataPoints);
+            streamConfig.CurrentStreamPosition = pointsSent;
+            streamConfig.StreamPointsSent += record.Tags.Count; // Count all tags as sent
+            
+            await publishingService.UpdateStreamingProgressAsync(recordGuid, streamConfig.StreamPointsSent, streamConfig.CurrentStreamPosition);
+            
+            _logger.LogDebug("Simulated streaming progress: {Position}/{Total} for dataset {DatasetName}", 
+                streamConfig.CurrentStreamPosition, totalDataPoints, record.DatasetName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing streaming dataset {DatasetName}", record.DatasetName);
+            
+            // Stop streaming on error
+            if (record.StreamConfig != null && Guid.TryParse(record.Id, out var errorGuid))
+            {
+                record.StreamConfig.IsActive = false;
+                await publishingService.UpdateStreamingStatsAsync(errorGuid, false);
             }
         }
     }

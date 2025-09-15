@@ -2,6 +2,8 @@
   "id": "258b2770-add6-42ca-b3fc-f8177845b0e9",
   "datasetName": "Sensor Data",
   "description": "",
+  "originalPrompt": null,
+  "scenarioParameters": null,
   "tags": [
     {
       "tagName": "VIBROMETER_ACCEL_CRACKWIDTH_REALTIME_CLEAR_15MIN",
@@ -3442,14 +3444,25 @@
     "applicationUri": "urn:TimeCraft:TimeCraftPublisher",
     "customProperties": {}
   },
+  "streamConfig": {
+    "mode": 0,
+    "streamIntervalMs": 1000,
+    "streamSpeed": 1,
+    "loopCycles": 0,
+    "loopPauseMs": 5000,
+    "isActive": true,
+    "currentCycle": 0,
+    "streamStartTime": "2025-09-15T20:34:06.7120701Z",
+    "reIngestionCount": 1
+  },
   "status": 2,
   "createdAt": "2025-09-15T18:31:24.1238229Z",
-  "publishedAt": "2025-09-15T18:51:23.5917258Z",
+  "publishedAt": "2025-09-15T20:35:25.5220572Z",
   "errorMessage": null,
   "retryCount": 0,
   "totalDataPoints": 840,
   "publishedDataPoints": 840,
-  "currentSequenceNumber": 841,
+  "currentSequenceNumber": 840,
   "metadata": {
     "publishedBy": "TimeCraft Web UI",
     "publishedAt": "2025-09-15T18:31:23.930Z",

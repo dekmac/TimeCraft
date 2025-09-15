@@ -3,11 +3,17 @@ using TimeCraft.Web.Services;
 using TimeCraft.Web.Services.Interfaces;
 using TimeCraft.Web.Services.Implementations;
 using TimeCraft.Web.Settings;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    });
 
 // Add HTTP client for Python API communication
 builder.Services.AddHttpClient<IPythonApiService, PythonApiService>();

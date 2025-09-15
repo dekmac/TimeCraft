@@ -138,6 +138,29 @@ export interface PublishTimeSeriesResponse {
 
 export type PublishingStatus = 'Pending' | 'InProgress' | 'Completed' | 'Failed' | 'Retrying';
 
+export type PublishingMode = 'Batch' | 'Loop' | 'RealTimeStream';
+
+export interface StreamConfiguration {
+    mode: PublishingMode;
+    streamIntervalMs: number;
+    streamSpeed: number;
+    loopCycles?: number | null;
+    loopPauseMs: number;
+    isActive: boolean;
+    currentCycle: number;
+    streamStartTime?: string;
+    reIngestionCount: number;
+    currentStreamPosition: number;
+    streamPointsSent: number;
+    pausedAt?: string;
+    totalStreamTime: string; // TimeSpan as string
+}
+
+export interface UpdateModeRequest {
+    mode: PublishingMode;
+    streamConfig?: StreamConfiguration;
+}
+
 export interface PublishedDataset {
     id: string;
     datasetName: string;
@@ -151,9 +174,12 @@ export interface PublishedDataset {
     namespaceName: string;
     totalDataPoints: number;
     publishedDataPoints: number;
+    totalTags: number;
+    publishedTags: number;
     errorMessage?: string;
     retryCount: number;
     progressPercentage: number;
+    streamConfig?: StreamConfiguration;
 }
 
 export interface PublishingStatusInfo {

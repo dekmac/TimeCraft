@@ -326,4 +326,232 @@ public class PublishingController : ControllerBase
             return StatusCode(500, "An error occurred while exporting the CSV file");
         }
     }
+
+    [HttpPost("datasets/{id}/re-ingest")]
+    public async Task<ActionResult> ReIngestDataset(string id)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            _logger.LogInformation("Re-ingestion requested for dataset {Id}", id);
+            
+            var success = await _publishingService.ReIngestDatasetAsync(id);
+            
+            if (!success)
+            {
+                return NotFound($"Dataset with ID {id} not found or cannot be re-ingested (must be in batch mode)");
+            }
+
+            return Ok(new { message = "Dataset re-ingestion initiated successfully", datasetId = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error re-ingesting dataset {Id}", id);
+            return StatusCode(500, "An error occurred while re-ingesting the dataset");
+        }
+    }
+
+    [HttpPut("datasets/{id}/mode")]
+    public async Task<ActionResult> UpdatePublishingMode(string id, [FromBody] UpdateModeRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                _logger.LogWarning("Dataset ID is null or empty");
+                return BadRequest("Dataset ID is required");
+            }
+
+            if (request == null)
+            {
+                _logger.LogWarning("Mode update request is null");
+                return BadRequest("Mode update request is required");
+            }
+
+            _logger.LogInformation("Updating publishing mode for dataset {Id} to {Mode}. Request: {@Request}", 
+                id, request.Mode, request);
+            
+            var success = await _publishingService.UpdatePublishingModeAsync(id, request.Mode, request.StreamConfig);
+            
+            if (!success)
+            {
+                _logger.LogWarning("Failed to update publishing mode for dataset {Id} - dataset not found", id);
+                return NotFound($"Dataset with ID {id} not found");
+            }
+
+            _logger.LogInformation("Successfully updated publishing mode for dataset {Id} to {Mode}", id, request.Mode);
+            return Ok(new { message = $"Publishing mode updated to {request.Mode}", datasetId = id, mode = request.Mode });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating publishing mode for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while updating the publishing mode");
+        }
+    }
+
+    [HttpPost("datasets/{id}/stop")]
+    public async Task<ActionResult> StopStreaming(string id)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            _logger.LogInformation("Stop streaming requested for dataset {Id}", id);
+            
+            var success = await _publishingService.StopStreamingAsync(id);
+            
+            if (!success)
+            {
+                return NotFound($"Dataset with ID {id} not found");
+            }
+
+            return Ok(new { message = "Streaming stopped successfully", datasetId = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error stopping streaming for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while stopping streaming");
+        }
+    }
+
+    [HttpPost("datasets/{id}/start")]
+    public async Task<ActionResult> StartStreaming(string id)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            _logger.LogInformation("Start streaming requested for dataset {Id}", id);
+            
+            var success = await _publishingService.StartStreamingAsync(id);
+            
+            if (!success)
+            {
+                return NotFound($"Dataset with ID {id} not found");
+            }
+
+            return Ok(new { message = "Streaming started successfully", datasetId = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting streaming for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while starting streaming");
+        }
+    }
+
+    [HttpPost("datasets/{id}/pause")]
+    public async Task<ActionResult> PauseStreaming(string id)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            _logger.LogInformation("Pause streaming requested for dataset {Id}", id);
+            
+            var success = await _publishingService.PauseStreamingAsync(id);
+            
+            if (!success)
+            {
+                return NotFound($"Dataset with ID {id} not found");
+            }
+
+            return Ok(new { message = "Streaming paused successfully", datasetId = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error pausing streaming for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while pausing streaming");
+        }
+    }
+
+    [HttpPost("datasets/{id}/update-progress")]
+    public async Task<ActionResult> UpdateStreamingProgress(string id, [FromBody] UpdateStreamingProgressRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return BadRequest("Invalid dataset ID format");
+            }
+
+            if (request == null)
+            {
+                return BadRequest("Progress update data is required");
+            }
+
+            _logger.LogDebug("Update streaming progress for dataset {Id}: {PointsSent} points, position {Position}", 
+                id, request.PointsSent, request.CurrentPosition);
+            
+            var success = await _publishingService.UpdateStreamingProgressAsync(guid, request.PointsSent, request.CurrentPosition);
+            
+            if (!success)
+            {
+                return NotFound($"Dataset with ID {id} not found or not configured for streaming");
+            }
+
+            return Ok(new { message = "Streaming progress updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating streaming progress for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while updating streaming progress");
+        }
+    }
+
+    [HttpPost("datasets/{id}/update-stats")]
+    public async Task<ActionResult> UpdateStreamingStats(string id, [FromBody] UpdateStreamingStatsRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return BadRequest("Invalid dataset ID format");
+            }
+
+            if (request == null)
+            {
+                return BadRequest("Stats update data is required");
+            }
+
+            _logger.LogDebug("Update streaming stats for dataset {Id}: active={IsActive}, cycle={CycleCount}", 
+                id, request.IsActive, request.CycleCount);
+            
+            var success = await _publishingService.UpdateStreamingStatsAsync(guid, request.IsActive, request.CycleCount);
+            
+            if (!success)
+            {
+                return NotFound($"Dataset with ID {id} not found or not configured for streaming");
+            }
+
+            return Ok(new { message = "Streaming stats updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating streaming stats for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while updating streaming stats");
+        }
+    }
 }

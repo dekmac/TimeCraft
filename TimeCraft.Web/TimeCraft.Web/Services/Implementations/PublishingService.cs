@@ -115,6 +115,63 @@ public class PublishingService : IPublishingService
         }
     }
 
+    public async Task<bool> UpdateStreamingProgressAsync(Guid id, int pointsSent, int currentPosition)
+    {
+        try
+        {
+            var record = await GetPublishRecordAsync(id.ToString());
+            if (record?.StreamConfig == null) return false;
+
+            record.StreamConfig.StreamPointsSent = pointsSent;
+            record.StreamConfig.CurrentStreamPosition = currentPosition;
+
+            await UpdatePublishRecordAsync(record);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update streaming progress for {Id}", id);
+            return false;
+        }
+    }
+
+    public async Task<bool> UpdateStreamingStatsAsync(Guid id, bool isActive, int? cycleCount = null)
+    {
+        try
+        {
+            var record = await GetPublishRecordAsync(id.ToString());
+            if (record?.StreamConfig == null) return false;
+
+            var wasActive = record.StreamConfig.IsActive;
+            record.StreamConfig.IsActive = isActive;
+
+            // Track timing
+            if (isActive && !wasActive)
+            {
+                // Starting/resuming
+                record.StreamConfig.PausedAt = null;
+            }
+            else if (!isActive && wasActive)
+            {
+                // Pausing
+                record.StreamConfig.PausedAt = DateTime.UtcNow;
+            }
+
+            if (cycleCount.HasValue)
+            {
+                record.StreamConfig.CurrentCycle = cycleCount.Value;
+            }
+
+            await UpdatePublishRecordAsync(record);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update streaming stats for {Id}", id);
+            return false;
+        }
+    }
+
     public async Task<PublishRecord?> GetPublishRecordAsync(string id)
     {
         try
@@ -190,7 +247,7 @@ public class PublishingService : IPublishingService
         }
     }
 
-    private async Task<List<PublishRecord>> GetAllPublishRecordsAsync()
+    public async Task<List<PublishRecord>> GetAllPublishRecordsAsync()
     {
         var records = new List<PublishRecord>();
         
@@ -236,6 +293,17 @@ public class PublishingService : IPublishingService
             Description = record.Description,
             OriginalPrompt = record.OriginalPrompt,
             ScenarioParameters = record.ScenarioParameters,
+            StreamConfig = record.StreamConfig ?? new StreamConfiguration
+            {
+                Mode = PublishingMode.Batch,
+                StreamIntervalMs = 1000,
+                StreamSpeed = 1.0,
+                LoopCycles = 1,
+                LoopPauseMs = 0,
+                IsActive = false,
+                CurrentCycle = 0,
+                ReIngestionCount = 0
+            },
             Status = record.Status,
             CreatedAt = record.CreatedAt,
             PublishedAt = record.PublishedAt,
@@ -243,6 +311,8 @@ public class PublishingService : IPublishingService
             NamespaceName = record.EventHubConfig.NamespaceName,
             TotalDataPoints = record.TotalDataPoints,
             PublishedDataPoints = record.PublishedDataPoints,
+            TotalTags = record.Tags.Count,
+            PublishedTags = record.Status == PublishingStatus.Completed ? record.Tags.Count : 0, // For now, tags are either all published or none
             ErrorMessage = record.ErrorMessage,
             RetryCount = record.RetryCount
         };
@@ -431,6 +501,237 @@ public class PublishingService : IPublishingService
         {
             _logger.LogError(ex, "Error generating CSV for dataset {DatasetId}", id);
             throw;
+        }
+    }
+
+    public async Task<bool> ReIngestDatasetAsync(string id)
+    {
+        try
+        {
+            var publishRecord = await GetPublishRecordAsync(id);
+            if (publishRecord == null)
+            {
+                _logger.LogWarning("Cannot re-ingest dataset {Id}: not found", id);
+                return false;
+            }
+
+            // Only allow re-ingestion for batch mode
+            if (publishRecord.StreamConfig.Mode != PublishingMode.Batch)
+            {
+                _logger.LogWarning("Cannot re-ingest dataset {Id}: not in batch mode", id);
+                return false;
+            }
+
+            // Reset publishing progress
+            publishRecord.Status = PublishingStatus.Pending;
+            publishRecord.PublishedDataPoints = 0;
+            publishRecord.CurrentSequenceNumber = 0;
+            publishRecord.ErrorMessage = null;
+            publishRecord.StreamConfig.ReIngestionCount++;
+            publishRecord.StreamConfig.StreamStartTime = DateTime.UtcNow;
+
+            await UpdatePublishRecordAsync(publishRecord);
+            
+            _logger.LogInformation("Re-ingestion initiated for dataset {Id}, count: {Count}", 
+                id, publishRecord.StreamConfig.ReIngestionCount);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error re-ingesting dataset {Id}", id);
+            return false;
+        }
+    }
+
+    public async Task<bool> UpdatePublishingModeAsync(string id, PublishingMode mode, StreamConfiguration? config = null)
+    {
+        try
+        {
+            var publishRecord = await GetPublishRecordAsync(id);
+            if (publishRecord == null)
+            {
+                _logger.LogWarning("Cannot update publishing mode for dataset {Id}: not found", id);
+                return false;
+            }
+
+            // Initialize StreamConfig for old datasets that don't have it
+            if (publishRecord.StreamConfig == null)
+            {
+                publishRecord.StreamConfig = new StreamConfiguration
+                {
+                    Mode = PublishingMode.Batch,
+                    StreamIntervalMs = 1000,
+                    StreamSpeed = 1.0,
+                    LoopCycles = 1,
+                    LoopPauseMs = 0,
+                    IsActive = false,
+                    CurrentCycle = 0,
+                    ReIngestionCount = 0
+                };
+            }
+
+            var oldMode = publishRecord.StreamConfig.Mode;
+            publishRecord.StreamConfig.Mode = mode;
+            
+            // Apply new configuration if provided
+            if (config != null)
+            {
+                publishRecord.StreamConfig.StreamIntervalMs = config.StreamIntervalMs;
+                publishRecord.StreamConfig.StreamSpeed = config.StreamSpeed;
+                publishRecord.StreamConfig.LoopCycles = config.LoopCycles;
+                publishRecord.StreamConfig.LoopPauseMs = config.LoopPauseMs;
+            }
+
+            // Reset appropriate fields when changing modes
+            if (mode != oldMode)
+            {
+                publishRecord.StreamConfig.CurrentCycle = 0;
+                publishRecord.StreamConfig.IsActive = true;
+                
+                // Reset progress if switching to a repeating mode
+                if (mode != PublishingMode.Batch)
+                {
+                    publishRecord.PublishedDataPoints = 0;
+                    publishRecord.CurrentSequenceNumber = 0;
+                    publishRecord.Status = PublishingStatus.Pending;
+                }
+            }
+
+            await UpdatePublishRecordAsync(publishRecord);
+            
+            _logger.LogInformation("Updated publishing mode for dataset {Id} from {OldMode} to {NewMode}", 
+                id, oldMode, mode);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating publishing mode for dataset {Id}", id);
+            return false;
+        }
+    }
+
+    public async Task<bool> StopStreamingAsync(string id)
+    {
+        try
+        {
+            var publishRecord = await GetPublishRecordAsync(id);
+            if (publishRecord == null)
+            {
+                return false;
+            }
+
+            // Initialize StreamConfig for old datasets that don't have it
+            if (publishRecord.StreamConfig == null)
+            {
+                publishRecord.StreamConfig = new StreamConfiguration
+                {
+                    Mode = PublishingMode.Batch,
+                    StreamIntervalMs = 1000,
+                    StreamSpeed = 1.0,
+                    LoopCycles = 1,
+                    LoopPauseMs = 0,
+                    IsActive = false,
+                    CurrentCycle = 0,
+                    ReIngestionCount = 0
+                };
+            }
+
+            publishRecord.StreamConfig.IsActive = false;
+            await UpdatePublishRecordAsync(publishRecord);
+            
+            _logger.LogInformation("Stopped streaming for dataset {Id}", id);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error stopping streaming for dataset {Id}", id);
+            return false;
+        }
+    }
+
+    public async Task<bool> StartStreamingAsync(string id)
+    {
+        try
+        {
+            var publishRecord = await GetPublishRecordAsync(id);
+            if (publishRecord == null)
+            {
+                return false;
+            }
+
+            // Initialize StreamConfig for old datasets that don't have it
+            if (publishRecord.StreamConfig == null)
+            {
+                publishRecord.StreamConfig = new StreamConfiguration
+                {
+                    Mode = PublishingMode.Batch,
+                    StreamIntervalMs = 1000,
+                    StreamSpeed = 1.0,
+                    LoopCycles = 1,
+                    LoopPauseMs = 0,
+                    IsActive = false,
+                    CurrentCycle = 0,
+                    ReIngestionCount = 0
+                };
+            }
+
+            publishRecord.StreamConfig.IsActive = true;
+            publishRecord.StreamConfig.StreamStartTime = DateTime.UtcNow;
+            
+            // If starting fresh, reset status
+            if (publishRecord.Status == PublishingStatus.Completed || publishRecord.Status == PublishingStatus.Failed)
+            {
+                publishRecord.Status = PublishingStatus.Pending;
+            }
+
+            await UpdatePublishRecordAsync(publishRecord);
+            
+            _logger.LogInformation("Started streaming for dataset {Id}", id);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting streaming for dataset {Id}", id);
+            return false;
+        }
+    }
+
+    public async Task<bool> PauseStreamingAsync(string id)
+    {
+        try
+        {
+            var publishRecord = await GetPublishRecordAsync(id);
+            if (publishRecord == null)
+            {
+                return false;
+            }
+
+            // Initialize StreamConfig for old datasets that don't have it
+            if (publishRecord.StreamConfig == null)
+            {
+                publishRecord.StreamConfig = new StreamConfiguration
+                {
+                    Mode = PublishingMode.Batch,
+                    StreamIntervalMs = 1000,
+                    StreamSpeed = 1.0,
+                    LoopCycles = 1,
+                    LoopPauseMs = 0,
+                    IsActive = false,
+                    CurrentCycle = 0,
+                    ReIngestionCount = 0
+                };
+            }
+
+            publishRecord.StreamConfig.IsActive = false;
+            await UpdatePublishRecordAsync(publishRecord);
+            
+            _logger.LogInformation("Paused streaming for dataset {Id}", id);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error pausing streaming for dataset {Id}", id);
+            return false;
         }
     }
 }

@@ -7,6 +7,7 @@ public class PublishedDataset
     public string Description { get; set; } = string.Empty;
     public string? OriginalPrompt { get; set; }
     public string? ScenarioParameters { get; set; }
+    public StreamConfiguration StreamConfig { get; set; } = new();
     public PublishingStatus Status { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
@@ -14,6 +15,8 @@ public class PublishedDataset
     public string NamespaceName { get; set; } = string.Empty;
     public int TotalDataPoints { get; set; }
     public int PublishedDataPoints { get; set; }
+    public int TotalTags { get; set; }
+    public int PublishedTags { get; set; }
     public string? ErrorMessage { get; set; }
     public int RetryCount { get; set; }
     public double ProgressPercentage => TotalDataPoints > 0 ? (double)PublishedDataPoints / TotalDataPoints * 100 : 0;

@@ -12,6 +12,7 @@ public class PublishRecord
     public List<DatasetTag> Tags { get; set; } = new();
     public EventHubConfig EventHubConfig { get; set; } = new();
     public OpcUaSettings OpcUaSettings { get; set; } = new();
+    public StreamConfiguration StreamConfig { get; set; } = new();
     public PublishingStatus Status { get; set; } = PublishingStatus.Pending;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? PublishedAt { get; set; }

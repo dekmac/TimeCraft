@@ -10,7 +10,9 @@ import type {
   PublishTimeSeriesResponse,
   PublishDatasetRequest,
   PublishedDataset,
-  PublishingStatusInfo
+  PublishingStatusInfo,
+  UpdateModeRequest,
+  PublishingMode
 } from '../types/api';
 
 class TimeCraftApiService {
@@ -123,6 +125,49 @@ class TimeCraftApiService {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  }
+
+  // New Publishing Mode APIs
+  async reIngestDataset(id: string): Promise<{ message: string; datasetId: string }> {
+    const response = await this.api.post<{ message: string; datasetId: string }>(`/publishing/datasets/${id}/re-ingest`);
+    return response.data;
+  }
+
+  async updatePublishingMode(id: string, request: UpdateModeRequest): Promise<{ message: string; datasetId: string; mode: PublishingMode }> {
+    console.log('Updating publishing mode:', { id, request });
+    const response = await this.api.put<{ message: string; datasetId: string; mode: PublishingMode }>(`/publishing/datasets/${id}/mode`, request);
+    return response.data;
+  }
+
+  async stopStreaming(id: string): Promise<{ message: string; datasetId: string }> {
+    const response = await this.api.post<{ message: string; datasetId: string }>(`/publishing/datasets/${id}/stop`);
+    return response.data;
+  }
+
+  async startStreaming(id: string): Promise<{ message: string; datasetId: string }> {
+    const response = await this.api.post<{ message: string; datasetId: string }>(`/publishing/datasets/${id}/start`);
+    return response.data;
+  }
+
+  async pauseStreaming(id: string): Promise<{ message: string; datasetId: string }> {
+    const response = await this.api.post<{ message: string; datasetId: string }>(`/publishing/datasets/${id}/pause`);
+    return response.data;
+  }
+
+  async updateStreamingProgress(id: string, pointsSent: number, currentPosition: number): Promise<{ message: string }> {
+    const response = await this.api.post<{ message: string }>(`/publishing/datasets/${id}/update-progress`, {
+      pointsSent,
+      currentPosition
+    });
+    return response.data;
+  }
+
+  async updateStreamingStats(id: string, isActive: boolean, cycleCount?: number): Promise<{ message: string }> {
+    const response = await this.api.post<{ message: string }>(`/publishing/datasets/${id}/update-stats`, {
+      isActive,
+      cycleCount
+    });
+    return response.data;
   }
 }
 
