@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { timeCraftApi } from '../services/timeCraftApi';
 import type { PublishedDataset } from '../types/api';
 
@@ -8,12 +8,14 @@ export const PublishedDatasets: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [retryingDatasets, setRetryingDatasets] = useState<Set<string>>(new Set());
+  const datasetsRef = useRef<PublishedDataset[]>([]);
 
   const loadDatasets = async () => {
     try {
       setError(null);
       const data = await timeCraftApi.getPublishedDatasets();
       setDatasets(data);
+      datasetsRef.current = data;
     } catch (err) {
       console.error('Error loading published datasets:', err);
       setError('Failed to load published datasets. Please try again.');
@@ -55,9 +57,10 @@ export const PublishedDatasets: React.FC = () => {
     
     // Set up auto-refresh for datasets that are in progress
     const interval = setInterval(() => {
-      const hasInProgressDatasets = datasets.some(d => 
-        d.status === 'Pending' || d.status === 'InProgress' || d.status === 'Retrying'
-      );
+      const hasInProgressDatasets = datasetsRef.current.some(d => {
+        const statusString = getStatusString(d.status);
+        return statusString === 'Pending' || statusString === 'InProgress' || statusString === 'Retrying';
+      });
       
       if (hasInProgressDatasets) {
         loadDatasets();
@@ -65,10 +68,14 @@ export const PublishedDatasets: React.FC = () => {
     }, 5000); // Refresh every 5 seconds
 
     return () => clearInterval(interval);
-  }, [datasets]);
+  }, []); // Empty dependency array - only run on mount
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  const getStatusColor = (status: string | number) => {
+    const statusString = typeof status === 'number' 
+      ? ['Pending', 'InProgress', 'Completed', 'Failed', 'Retrying'][status] || 'Unknown'
+      : status;
+      
+    switch (statusString) {
       case 'Completed': return 'text-green-600 bg-green-100';
       case 'Failed': return 'text-red-600 bg-red-100';
       case 'InProgress': return 'text-blue-600 bg-blue-100';
@@ -78,12 +85,19 @@ export const PublishedDatasets: React.FC = () => {
     }
   };
 
+  const getStatusString = (status: string | number): string => {
+    return typeof status === 'number' 
+      ? ['Pending', 'InProgress', 'Completed', 'Failed', 'Retrying'][status] || 'Unknown'
+      : status;
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
 
-  const getProgressBarColor = (status: string) => {
-    switch (status) {
+  const getProgressBarColor = (status: string | number) => {
+    const statusString = getStatusString(status);
+    switch (statusString) {
       case 'Completed': return 'bg-green-500';
       case 'Failed': return 'bg-red-500';
       case 'InProgress': return 'bg-blue-500';
@@ -151,7 +165,7 @@ export const PublishedDatasets: React.FC = () => {
                   )}
                 </div>
                 <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(dataset.status)}`}>
-                  {dataset.status}
+                  {getStatusString(dataset.status)}
                 </span>
               </div>
 
@@ -173,20 +187,23 @@ export const PublishedDatasets: React.FC = () => {
               </div>
 
               {/* Progress Bar */}
-              {dataset.status === 'InProgress' || dataset.status === 'Retrying' || dataset.progressPercentage < 100 ? (
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-gray-600">Publishing Progress</span>
-                    <span className="text-xs text-gray-600">{dataset.progressPercentage.toFixed(1)}%</span>
+              {(() => {
+                const statusString = getStatusString(dataset.status);
+                return (statusString === 'InProgress' || statusString === 'Retrying' || dataset.progressPercentage < 100) ? (
+                  <div className="mb-4">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs text-gray-600">Publishing Progress</span>
+                      <span className="text-xs text-gray-600">{dataset.progressPercentage.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-300 ${getProgressBarColor(dataset.status)}`}
+                        style={{ width: `${dataset.progressPercentage}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className={`h-2 rounded-full transition-all duration-300 ${getProgressBarColor(dataset.status)}`}
-                      style={{ width: `${dataset.progressPercentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ) : null}
+                ) : null;
+              })()}
 
               <div className="flex justify-between items-center text-xs text-gray-500">
                 <div className="space-x-4">
@@ -207,7 +224,7 @@ export const PublishedDatasets: React.FC = () => {
               )}
 
               {/* Action buttons for failed datasets */}
-              {dataset.status === 'Failed' && (
+              {getStatusString(dataset.status) === 'Failed' && (
                 <div className="mt-4 flex justify-end">
                   <button
                     onClick={() => handleForceRetry(dataset.id, dataset.datasetName)}
