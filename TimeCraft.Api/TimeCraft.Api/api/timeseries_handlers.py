@@ -574,12 +574,16 @@ def reflect_on_timeseries_generation(tag_name: str, description: str,
 
 
 def parse_tag_names_response(response: str, num_tags: int) -> List[str]:
-    """Parse LLM response to extract tag names."""
+    """Parse LLM response to extract tag names (legacy format for backwards compatibility)."""
     try:
         # Clean the response
         response = response.strip()
         
-        # Split by commas and clean each tag
+        # Check if it's the new format with units (TAG_NAME|UNIT|DESCRIPTION)
+        if '|' in response:
+            return parse_enhanced_tag_response(response, num_tags)
+        
+        # Split by commas and clean each tag (legacy format)
         tags = [tag.strip() for tag in response.split(',') if tag.strip()]
         
         # Ensure we have exactly num_tags
@@ -596,6 +600,74 @@ def parse_tag_names_response(response: str, num_tags: int) -> List[str]:
         print(f"Error parsing tag names response: {e}")
         # Return generic tags as fallback
         return [f'Tag_{i + 1}' for i in range(num_tags)]
+
+
+def parse_enhanced_tag_response(response: str, num_tags: int) -> Tuple[List[str], List[dict]]:
+    """Parse enhanced LLM response to extract tag names, units, and descriptions."""
+    try:
+        tags = []
+        tag_details = []
+        
+        lines = [line.strip() for line in response.split('\n') if line.strip()]
+        
+        for line in lines:
+            if '|' in line:
+                parts = line.split('|')
+                if len(parts) >= 3:
+                    tag_name = parts[0].strip()
+                    unit = parts[1].strip()
+                    description = parts[2].strip()
+                    
+                    tags.append(tag_name)
+                    tag_details.append({
+                        'tag': tag_name,
+                        'unit': unit,
+                        'description': description
+                    })
+                elif len(parts) == 2:
+                    # Handle case with just TAG|UNIT
+                    tag_name = parts[0].strip()
+                    unit = parts[1].strip()
+                    
+                    tags.append(tag_name)
+                    tag_details.append({
+                        'tag': tag_name,
+                        'unit': unit,
+                        'description': f'{tag_name} sensor'
+                    })
+            else:
+                # Fallback for lines without proper format
+                tag_name = line.strip()
+                tags.append(tag_name)
+                tag_details.append({
+                    'tag': tag_name,
+                    'unit': 'units',
+                    'description': f'{tag_name} sensor'
+                })
+        
+        # Ensure we have exactly num_tags
+        while len(tags) < num_tags:
+            i = len(tags) + 1
+            tag_name = f'SENSOR_TAG_{i:02d}'
+            tags.append(tag_name)
+            tag_details.append({
+                'tag': tag_name,
+                'unit': 'units',
+                'description': f'Generic sensor {i}'
+            })
+            
+        if len(tags) > num_tags:
+            tags = tags[:num_tags]
+            tag_details = tag_details[:num_tags]
+        
+        return tags, tag_details
+        
+    except Exception as e:
+        print(f"Error parsing enhanced tag response: {e}")
+        # Return fallback data
+        tags = [f'Tag_{i + 1}' for i in range(num_tags)]
+        tag_details = [{'tag': tag, 'unit': 'units', 'description': f'{tag} sensor'} for tag in tags]
+        return tags, tag_details
 
 
 def generate_tag_names_with_llm(description: str, num_tags: int, chat_llm) -> List[str]:
