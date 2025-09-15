@@ -1135,15 +1135,21 @@ def handle_generate_tags(request: TagGenerationRequest, bridge_text2ts_available
         print(f"Generated tags: {generated_tags}")
         
         # Step 3: Prepare response
+
+        # Make 'tags' field permissive: allow both array and string for UI compatibility
+        # If generated_tags is a tuple (from generate_tag_names_with_llm), use the first element
+        tags_value = generated_tags[0] if isinstance(generated_tags, tuple) else generated_tags
         response_data = {
             "status": "success",
             "message": f"Tag names generated successfully using {tag_generation_method} method",
             "text_description": request.text_description,
             "num_tags": request.num_tags,
-            "tags": generated_tags,
+            "tags": tags_value,
+            # Also provide a string version for backward compatibility
+            "tags_string": ",".join(tags_value) if isinstance(tags_value, list) else tags_value,
             "generation_method": tag_generation_method
         }
-        
+
         print(f"Returning tag response with method: {tag_generation_method}")
         return JSONResponse(response_data)
         
