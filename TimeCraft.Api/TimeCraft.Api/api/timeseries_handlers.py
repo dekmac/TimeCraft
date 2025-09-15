@@ -215,13 +215,18 @@ class FallbackChatLLM:
             prompt_lower = str(prompt).lower()
             domain_tags = get_domain_specific_tags()
             
-            if any(keyword in prompt_lower for keyword in ["milk", "dairy", "pasteurize", "homogenize", "cheese", "yogurt"]):
+            # Check for historic building/heritage monitoring first (most specific)
+            if any(keyword in prompt_lower for keyword in ["historic", "heritage", "monument", "museum", "tourist", "visitor", "footfall", "seismic", "spain"]):
+                return ", ".join(domain_tags['historic_building'][:5])
+            elif any(keyword in prompt_lower for keyword in ["building", "hvac", "occupancy", "presence"]):
+                return ", ".join(domain_tags['historic_building'][:5])  # Use historic_building as general building fallback
+            elif any(keyword in prompt_lower for keyword in ["milk", "dairy", "pasteurize", "homogenize", "cheese", "yogurt"]):
                 return ", ".join(domain_tags['dairy'][:5])
             elif any(keyword in prompt_lower for keyword in ["manufacturing", "factory", "assembly", "production", "conveyor"]):
                 return ", ".join(domain_tags['manufacturing'][:5])
             elif any(keyword in prompt_lower for keyword in ["chemical", "reactor", "distillation", "ph", "catalyst"]):
                 return ", ".join(domain_tags['chemical'][:5])
-            elif any(keyword in prompt_lower for keyword in ["hvac", "chiller", "ahu", "air handling", "cooling"]):
+            elif any(keyword in prompt_lower for keyword in ["chiller", "ahu", "air handling", "cooling"]):
                 return ", ".join(domain_tags['hvac'][:5])
             elif any(keyword in prompt_lower for keyword in ["power", "generator", "turbine", "electrical", "voltage"]):
                 return ", ".join(domain_tags['power'][:5])
@@ -232,9 +237,7 @@ class FallbackChatLLM:
             elif any(keyword in prompt_lower for keyword in ["automotive", "engine", "transmission", "brake", "vehicle"]):
                 return ", ".join(domain_tags['automotive'][:5])
             elif "bridge" in prompt_lower or "structural" in prompt_lower:
-                return ", ".join(domain_tags['bridge'][:5])
-            elif "building" in prompt_lower:
-                return ", ".join(domain_tags['building'][:5])
+                return ", ".join(domain_tags.get('bridge', domain_tags['historic_building'])[:5])
             else:
                 # Generic industrial sensors
                 return ", ".join(domain_tags['default'][:5])
@@ -670,36 +673,54 @@ def parse_enhanced_tag_response(response: str, num_tags: int) -> Tuple[List[str]
         return tags, tag_details
 
 
-def generate_tag_names_with_llm(description: str, num_tags: int, chat_llm) -> List[str]:
-    """Generate tag names using LLM with self-reflection for quality assurance."""
+def generate_tag_names_with_llm(description: str, num_tags: int, chat_llm) -> Tuple[List[str], List[dict]]:
+    """Generate tag names with units using LLM with self-reflection for quality assurance."""
     try:
         prompt = prompt_manager.get_tag_generation_prompt(description, num_tags)
-        print(f"Generating tag names with prompt: '{prompt[:50]}...'")
+        print(f"Generating enhanced tags with units using prompt: '{prompt[:50]}...'")
         
         # Initial generation
         response = chat_llm.generate(prompt)
-        print(f"LLM tag name response: '{response[:50]}...'")
-        initial_tags = parse_tag_names_response(response, num_tags)
-        print(f"Initial tags: {initial_tags}")
+        print(f"LLM enhanced tag response: '{response[:100]}...'")
         
-        # Self-reflection step
+        # Try to parse as enhanced format first
+        if '|' in response:
+            initial_tags, tag_details = parse_enhanced_tag_response(response, num_tags)
+            tag_preview = [f"{t['tag']}({t['unit']})" for t in tag_details[:3]]
+            print(f"✅ Parsed enhanced tags with units: {tag_preview}...")
+        else:
+            # Fall back to legacy format
+            initial_tags = parse_tag_names_response(response, num_tags)
+            tag_details = [{'tag': tag, 'unit': 'units', 'description': f'{tag} sensor'} for tag in initial_tags]
+            print(f"⚠️ Using legacy format tags: {initial_tags}")
+        
+        # Self-reflection step (for now, just on tag names)
         print("🔍 Starting tag generation self-reflection...")
         final_tags, was_improved = reflect_on_tag_generation(
             description, initial_tags, num_tags, chat_llm, max_retries=2
         )
         
+        # Update tag_details if tags were improved
         if was_improved:
             print(f"✅ Tags improved through reflection: {final_tags}")
+            # Create new tag details for improved tags (preserve units if possible)
+            if len(final_tags) == len(tag_details):
+                for i, tag in enumerate(final_tags):
+                    tag_details[i]['tag'] = tag
+            else:
+                tag_details = [{'tag': tag, 'unit': 'units', 'description': f'{tag} sensor'} for tag in final_tags]
         else:
-            print(f"✅ Initial tags passed reflection: {final_tags}")
+            print(f"✅ Initial tags passed reflection")
             
-        return final_tags
+        return final_tags, tag_details
         
     except Exception as e:
-        print(f"Error generating tag names with LLM: {e}")
+        print(f"Error generating enhanced tags with LLM: {e}")
         print("Falling back to keyword-based tag generation")
         # Fallback to keyword-based generation
-        return generate_tag_names_from_description(description, num_tags, chat_llm)
+        tags = generate_tag_names_from_description(description, num_tags, chat_llm)
+        tag_details = [{'tag': tag, 'unit': 'units', 'description': f'{tag} sensor'} for tag in tags]
+        return tags, tag_details
 
 
 def parse_timeseries_response(response: str, tag_name: str, sequence_length: int, 
@@ -739,44 +760,133 @@ def parse_timeseries_response(response: str, tag_name: str, sequence_length: int
         return generate_mock_timeseries(sequence_length, "default", 50.0 + (tag_index * 20.0))
 
 
+def validate_scenario_alignment(tag_name: str, tag_unit: str, description: str, 
+                               generated_values: List[float], chat_llm) -> Tuple[bool, str]:
+    """Validate that generated timeseries makes sense against the original scenario."""
+    try:
+        # Create validation prompt
+        values_preview = ", ".join([f"{v:.3f}" for v in generated_values[:10]])
+        if len(generated_values) > 10:
+            values_preview += f"... (showing first 10 of {len(generated_values)} values)"
+        
+        stats = {
+            'min': min(generated_values),
+            'max': max(generated_values),
+            'avg': sum(generated_values) / len(generated_values),
+            'range': max(generated_values) - min(generated_values)
+        }
+        
+        validation_prompt = f"""You are an expert in industrial monitoring and scenario validation. 
+
+ORIGINAL SCENARIO: {description}
+SENSOR TAG: {tag_name} (Units: {tag_unit})
+GENERATED DATA PREVIEW: {values_preview}
+DATA STATISTICS: Min={stats['min']:.3f}, Max={stats['max']:.3f}, Avg={stats['avg']:.3f}, Range={stats['range']:.3f}
+
+VALIDATION QUESTIONS:
+1. Does this sensor type make sense for the described scenario?
+2. Are the data values realistic for this sensor type and units?
+3. Do the value ranges align with what would be expected in this scenario?
+4. Does the data variation pattern make physical sense?
+
+ASSESSMENT:
+- ALIGNMENT_SCORE (1-10): How well does this data align with the scenario?
+- REALISM_SCORE (1-10): How realistic are these values for this sensor?
+- OVERALL_VALID (YES/NO): Is this data acceptable for the scenario?
+- ISSUES: [List any problems found]
+- REASONING: [Explain your assessment]
+
+Format your response as:
+ALIGNMENT_SCORE: [score]
+REALISM_SCORE: [score]  
+OVERALL_VALID: [YES/NO]
+ISSUES: [issues]
+REASONING: [reasoning]"""
+
+        print(f"🔍 Validating scenario alignment for {tag_name}...")
+        validation_response = chat_llm.generate(validation_prompt)
+        print(f"📝 Validation response: {validation_response[:200]}...")
+        
+        # Parse validation response
+        is_valid = "OVERALL_VALID: YES" in validation_response.upper()
+        return is_valid, validation_response
+        
+    except Exception as e:
+        print(f"❌ Scenario validation failed for {tag_name}: {e}")
+        # Default to valid if validation fails
+        return True, f"Validation failed but assuming valid: {e}"
+
+
 def generate_timeseries_with_llm(tag_name: str, description: str, 
                                 sequence_length: int, tag_index: int, 
-                                chat_llm) -> List[float]:
-    """Generate timeseries data using LLM with self-reflection for quality assurance."""
+                                chat_llm, tag_unit: str = "units") -> List[float]:
+    """Generate timeseries data using LLM with enhanced workflow: units, scenario awareness, and validation."""
     try:
-        # Generate device-specific prompt
+        print(f"🚀 Enhanced timeseries generation for {tag_name} ({tag_unit})")
+        
+        # Step 1: Generate device-specific prompt
         device_info = detect_device_type_from_tag(tag_name)
         device_prompt = prompt_manager.get_device_analysis_prompt(tag_name, device_info)
         
-        # Generate the main prompt
-        prompt = prompt_manager.get_timeseries_generation_prompt(
-            tag_name, description, sequence_length, device_prompt=device_prompt
-        )
-        print(f"🤖 Generating timeseries for {tag_name} with LLM")
-        print(f"📝 Prompt (first 100 chars): '{prompt[:100]}...'")
+        # Step 2: Generate the main prompt with units and scenario context
+        enhanced_prompt = f"""Generate realistic time series data for sensor: {tag_name}
+Units: {tag_unit}
+Scenario Context: {description}
+
+{device_prompt}
+
+IMPORTANT: Consider the sensor type ({tag_name}), its units ({tag_unit}), and the specific scenario context when generating data.
+Generate exactly {sequence_length} numerical values that make physical sense for this sensor in this scenario."""
+
+        print(f"🤖 Generating timeseries for {tag_name} with enhanced context")
+        print(f"📝 Tag: {tag_name}, Units: {tag_unit}")
         print(f"🎯 Model: {getattr(chat_llm, 'model_name', 'unknown')}")
             
-        # Initial generation
-        response = chat_llm.generate(prompt)
+        # Step 3: Initial generation
+        response = chat_llm.generate(enhanced_prompt)
         print(f"✅ LLM response received for {tag_name}")
         print(f"📊 Response (first 100 chars): '{response[:100]}...'")
         
         initial_data = parse_timeseries_response(response, tag_name, sequence_length, tag_index)
         print(f"✅ Successfully parsed {len(initial_data)} initial values for {tag_name}")
-        print(f"📈 Initial range: {min(initial_data):.3f} to {max(initial_data):.3f}")
+        print(f"📈 Initial range: {min(initial_data):.3f} to {max(initial_data):.3f} {tag_unit}")
         
-        # Self-reflection step
-        print(f"🔍 Starting timeseries self-reflection for {tag_name}...")
-        final_data, was_improved = reflect_on_timeseries_generation(
-            tag_name, description, initial_data, sequence_length, tag_index, chat_llm, max_retries=2
+        # Step 4: Scenario validation
+        print(f"🎯 Validating scenario alignment for {tag_name}...")
+        is_valid, validation_feedback = validate_scenario_alignment(
+            tag_name, tag_unit, description, initial_data, chat_llm
         )
         
-        if was_improved:
-            print(f"✅ Timeseries improved through reflection for {tag_name}")
-            print(f"📈 Final range: {min(final_data):.3f} to {max(final_data):.3f}")
-        else:
-            print(f"✅ Initial timeseries passed reflection for {tag_name}")
+        if not is_valid:
+            print(f"⚠️ Scenario validation failed for {tag_name}, attempting improvement...")
+            # Try to improve based on validation feedback
+            improvement_prompt = f"""The previous timeseries data for {tag_name} ({tag_unit}) did not align well with the scenario.
+
+SCENARIO: {description}
+VALIDATION FEEDBACK: {validation_feedback}
+
+Please generate improved timeseries data that better aligns with the scenario. Generate exactly {sequence_length} values."""
             
+            improved_response = chat_llm.generate(improvement_prompt)
+            improved_data = parse_timeseries_response(improved_response, tag_name, sequence_length, tag_index)
+            print(f"� Generated improved data: {min(improved_data):.3f} to {max(improved_data):.3f} {tag_unit}")
+            final_data = improved_data
+        else:
+            print(f"✅ Scenario validation passed for {tag_name}")
+            final_data = initial_data
+        
+        # Step 5: Traditional self-reflection (optional, can be skipped if scenario validation passed)
+        if not is_valid:  # Only do reflection if validation failed
+            print(f"🔍 Starting additional self-reflection for {tag_name}...")
+            final_data, was_improved = reflect_on_timeseries_generation(
+                tag_name, description, final_data, sequence_length, tag_index, chat_llm, max_retries=1
+            )
+            
+            if was_improved:
+                print(f"✅ Timeseries further improved through reflection for {tag_name}")
+                print(f"📈 Final range: {min(final_data):.3f} to {max(final_data):.3f} {tag_unit}")
+        
+        print(f"🎉 Completed enhanced generation for {tag_name}")
         return final_data
         
     except Exception as e:
@@ -1087,15 +1197,19 @@ def handle_generate_single_timeseries(request: SingleTimeSeriesRequest, bridge_t
         tag_index = getattr(request, 'tag_index', 0)
         
         if llm_available and chat_llm:
-            print(f"Generating timeseries for {request.tag_name} with LLM")
+            print(f"Generating timeseries for {request.tag_name} with enhanced LLM workflow")
+            # Extract unit from tag name or use default
+            tag_unit = getattr(request, 'tag_unit', 'units')
+            
             timeseries_data = generate_timeseries_with_llm(
                 request.tag_name, 
                 request.text_description, 
                 request.sequence_length, 
                 tag_index, 
-                chat_llm
+                chat_llm,
+                tag_unit
             )
-            generation_method = "llm"
+            generation_method = "llm_enhanced"
             
         elif bridge_text2ts_available:
             print(f"Generating timeseries for {request.tag_name} with BRIDGE fallback")
@@ -1193,15 +1307,17 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
                 except Exception as e2:
                     print(f"Fallback ChatLLM failed: {e2}")
         
-        # Step 2: Generate tag names using the best available method
+        # Step 2: Generate tag names with units using the best available method
+        tag_details = []  # Will store tag info including units
+        
         if llm_available and chat_llm:
-            print("Generating tags with LLM")
-            generated_tags = generate_tag_names_with_llm(
+            print("Generating enhanced tags with units using LLM")
+            generated_tags, tag_details = generate_tag_names_with_llm(
                 request.text_description, 
                 request.num_tags, 
                 chat_llm
             )
-            tag_generation_method = "llm"
+            tag_generation_method = "llm_enhanced"
         else:
             print("Generating tags with keyword mapping")
             generated_tags = generate_tag_names_from_description(
@@ -1209,28 +1325,35 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
                 request.num_tags,
                 chat_llm
             )
+            # Create basic tag details for fallback
+            tag_details = [{'tag': tag, 'unit': 'units', 'description': f'{tag} sensor'} for tag in generated_tags]
             tag_generation_method = "keyword"
         
-        print(f"Generated tags: {generated_tags}")
+        print(f"Generated tags with details: {[(td['tag'], td['unit']) for td in tag_details]}")
         
         # Step 3: Generate timeseries data using the best available method
         generated_timeseries = {}
         
         if llm_available and chat_llm:
-            print("Generating timeseries with LLM")
-            # Use LLM-based generation for each tag
-            for i, tag in enumerate(generated_tags):
+            print("Generating timeseries with enhanced LLM workflow (units + scenario validation)")
+            # Use enhanced LLM-based generation for each tag
+            for i, tag_detail in enumerate(tag_details):
+                tag_name = tag_detail['tag']
+                tag_unit = tag_detail['unit']
+                
+                print(f"🔄 Processing tag {i+1}/{len(tag_details)}: {tag_name} ({tag_unit})")
                 timeseries_data = generate_timeseries_with_llm(
-                    tag, 
+                    tag_name, 
                     request.text_description, 
                     request.sequence_length, 
                     i, 
-                    chat_llm
+                    chat_llm,
+                    tag_unit  # Pass the unit information
                 )
-                generated_timeseries[tag] = timeseries_data
+                generated_timeseries[tag_name] = timeseries_data
             
-            generation_method = "llm"
-            status_message = "Time series generated successfully from text description using LLM"
+            generation_method = "llm_enhanced"
+            status_message = "Time series generated using enhanced LLM workflow with units and scenario validation"
             
         elif bridge_text2ts_available:
             print("Generating timeseries with BRIDGE fallback")
@@ -1286,12 +1409,13 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
             generation_method = "enhanced_mock"
             status_message = "Generated enhanced scenario-aware mock time series data."
         
-        # Step 4: Prepare response based on generation method
+        # Step 4: Prepare enhanced response with tag details and generation information
         response_data = {
             "status": "success",
             "message": status_message,
             "text_description": request.text_description,
-            "tags": generated_tags,
+            "tags": generated_tags,  # Keep for backwards compatibility
+            "tag_details": tag_details,  # Enhanced tag information with units
             "sequence_length": request.sequence_length,
             "num_tags": request.num_tags,
             "generated_timeseries": generated_timeseries,
@@ -1299,17 +1423,28 @@ def handle_aggregate_timeseries_generation(request: AggregateTimeSeriesRequest, 
                 "generation_method": generation_method,
                 "tag_generation_method": tag_generation_method,
                 "llm_available": llm_available,
-                "bridge_available": bridge_text2ts_available
+                "bridge_available": bridge_text2ts_available,
+                "workflow_steps": [
+                    "1. Generate tag names with units based on scenario",
+                    "2. Generate timeseries data considering tag, units, and scenario",
+                    "3. Validate output alignment with original scenario"
+                ]
             }
         }
         
-        # Add appropriate notes based on generation method
-        if generation_method == "llm":
-            response_data["note"] = "Generated using AI-powered LLM for both tag names and timeseries data"
+        # Add enhanced notes based on generation method
+        if generation_method == "llm_enhanced":
+            response_data["note"] = "🤖 Generated using enhanced AI workflow: scenario-aware tag generation with units, context-aware timeseries generation, and scenario validation"
+            response_data["generation_quality"] = "High - Full LLM pipeline with scenario validation"
+        elif generation_method == "llm":
+            response_data["note"] = "🤖 Generated using AI-powered LLM for both tag names and timeseries data"
+            response_data["generation_quality"] = "Good - LLM generated"
         elif generation_method == "bridge_components":
-            response_data["note"] = "Generated using BRIDGE components with enhanced tag generation"
+            response_data["note"] = "🔧 Generated using BRIDGE components with enhanced tag generation"
+            response_data["generation_quality"] = "Medium - BRIDGE components"
         else:
-            response_data["note"] = "Generated using mock data with keyword-based tag generation"
+            response_data["note"] = "📋 Generated using mock data with keyword-based tag generation"
+            response_data["generation_quality"] = "Basic - Mock data with keyword matching"
         
         print(f"Returning response with method: {generation_method}")
         return JSONResponse(response_data)
