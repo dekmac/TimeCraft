@@ -12,4 +12,5 @@ public interface IPublishingService
     Task<List<PublishRecord>> GetPendingPublishRecordsAsync();
     Task<ExportDeltaFramesCsvResponse> ExportDeltaFramesCsvAsync(ExportDeltaFramesCsvRequest request);
     Task<bool> ForceRetryDatasetAsync(string id);
+    Task<byte[]> DownloadDatasetCsvAsync(string id);
 }

@@ -8,6 +8,8 @@ export const PublishedDatasets: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [retryingDatasets, setRetryingDatasets] = useState<Set<string>>(new Set());
+  const [downloadingDatasets, setDownloadingDatasets] = useState<Set<string>>(new Set());
+  const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
   const datasetsRef = useRef<PublishedDataset[]>([]);
 
   const loadDatasets = async () => {
@@ -50,6 +52,38 @@ export const PublishedDatasets: React.FC = () => {
         return newSet;
       });
     }
+  };
+
+  const handleDownloadCsv = async (datasetId: string, datasetName: string) => {
+    try {
+      setDownloadingDatasets(prev => new Set(prev).add(datasetId));
+      
+      const filename = `${datasetName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+      await timeCraftApi.downloadDatasetCsv(datasetId, filename);
+      
+      console.log(`Downloaded CSV for dataset: ${datasetName}`);
+    } catch (err) {
+      console.error('Error downloading CSV:', err);
+      setError(`Failed to download CSV for dataset "${datasetName}". Please try again.`);
+    } finally {
+      setDownloadingDatasets(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(datasetId);
+        return newSet;
+      });
+    }
+  };
+
+  const toggleDatasetExpansion = (datasetId: string) => {
+    setExpandedDatasets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(datasetId)) {
+        newSet.delete(datasetId);
+      } else {
+        newSet.add(datasetId);
+      }
+      return newSet;
+    });
   };
 
   useEffect(() => {
@@ -186,6 +220,38 @@ export const PublishedDatasets: React.FC = () => {
                 </div>
               </div>
 
+              {/* Scenario/Prompt Information */}
+              {(dataset.originalPrompt || dataset.scenarioParameters) && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => toggleDatasetExpansion(dataset.id)}
+                    className="flex items-center text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    <span className="mr-1">
+                      {expandedDatasets.has(dataset.id) ? '▼' : '▶'}
+                    </span>
+                    View Original Scenario Details
+                  </button>
+                  
+                  {expandedDatasets.has(dataset.id) && (
+                    <div className="mt-3 p-4 bg-gray-50 rounded border">
+                      {dataset.originalPrompt && (
+                        <div className="mb-3">
+                          <h4 className="text-xs font-medium text-gray-700 uppercase mb-2">Original Prompt</h4>
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap">{dataset.originalPrompt}</p>
+                        </div>
+                      )}
+                      {dataset.scenarioParameters && (
+                        <div>
+                          <h4 className="text-xs font-medium text-gray-700 uppercase mb-2">Scenario Parameters</h4>
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap">{dataset.scenarioParameters}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Progress Bar */}
               {(() => {
                 const statusString = getStatusString(dataset.status);
@@ -223,9 +289,28 @@ export const PublishedDatasets: React.FC = () => {
                 </div>
               )}
 
-              {/* Action buttons for failed datasets */}
-              {getStatusString(dataset.status) === 'Failed' && (
-                <div className="mt-4 flex justify-end">
+              {/* Action buttons */}
+              <div className="mt-4 flex justify-end space-x-3">
+                {/* Download CSV button - available for all datasets */}
+                <button
+                  onClick={() => handleDownloadCsv(dataset.id, dataset.datasetName)}
+                  disabled={downloadingDatasets.has(dataset.id)}
+                  className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  {downloadingDatasets.has(dataset.id) ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      📥 Download CSV
+                    </>
+                  )}
+                </button>
+
+                {/* Force Retry button - only for failed datasets */}
+                {getStatusString(dataset.status) === 'Failed' && (
                   <button
                     onClick={() => handleForceRetry(dataset.id, dataset.datasetName)}
                     disabled={retryingDatasets.has(dataset.id)}
@@ -242,8 +327,8 @@ export const PublishedDatasets: React.FC = () => {
                       </>
                     )}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           ))}
         </div>

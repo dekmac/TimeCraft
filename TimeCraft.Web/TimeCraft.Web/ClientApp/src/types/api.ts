@@ -142,6 +142,8 @@ export interface PublishedDataset {
     id: string;
     datasetName: string;
     description: string;
+    originalPrompt?: string;
+    scenarioParameters?: string;
     status: PublishingStatus;
     createdAt: string;
     publishedAt?: string;

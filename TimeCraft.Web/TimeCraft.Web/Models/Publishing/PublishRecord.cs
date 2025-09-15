@@ -7,6 +7,8 @@ public class PublishRecord
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string DatasetName { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string? OriginalPrompt { get; set; }
+    public string? ScenarioParameters { get; set; }
     public List<DatasetTag> Tags { get; set; } = new();
     public EventHubConfig EventHubConfig { get; set; } = new();
     public OpcUaSettings OpcUaSettings { get; set; } = new();

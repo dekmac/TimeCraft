@@ -3442,14 +3442,14 @@
     "applicationUri": "urn:TimeCraft:TimeCraftPublisher",
     "customProperties": {}
   },
-  "status": 0,
+  "status": 2,
   "createdAt": "2025-09-15T18:31:24.1238229Z",
-  "publishedAt": null,
+  "publishedAt": "2025-09-15T18:51:23.5917258Z",
   "errorMessage": null,
   "retryCount": 0,
   "totalDataPoints": 840,
-  "publishedDataPoints": 0,
-  "currentSequenceNumber": 1,
+  "publishedDataPoints": 840,
+  "currentSequenceNumber": 841,
   "metadata": {
     "publishedBy": "TimeCraft Web UI",
     "publishedAt": "2025-09-15T18:31:23.930Z",

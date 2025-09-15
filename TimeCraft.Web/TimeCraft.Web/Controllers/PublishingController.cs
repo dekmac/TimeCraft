@@ -200,6 +200,37 @@ public class PublishingController : ControllerBase
         }
     }
 
+    [HttpGet("datasets/{id}/download-csv")]
+    public async Task<IActionResult> DownloadDatasetCsv(string id)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            _logger.LogInformation("Downloading CSV for dataset {Id}", id);
+            
+            var dataset = await _publishingService.GetPublishedDatasetAsync(id);
+            if (dataset == null)
+            {
+                return NotFound($"Dataset with ID {id} not found");
+            }
+
+            var csvData = await _publishingService.DownloadDatasetCsvAsync(id);
+            
+            var fileName = $"{dataset.DatasetName.Replace(" ", "_")}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            
+            return File(csvData, "text/csv", fileName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error downloading CSV for dataset {Id}", id);
+            return StatusCode(500, "An error occurred while downloading the CSV file");
+        }
+    }
+
     [HttpPost("datasets/{id}/export-csv")]
     public async Task<IActionResult> ExportDeltaFramesCsv(string id, [FromBody] ExportDeltaFramesCsvRequest? request = null)
     {

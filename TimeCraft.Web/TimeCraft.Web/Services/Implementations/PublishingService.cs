@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using TimeCraft.Web.Models.Publishing;
@@ -233,6 +234,8 @@ public class PublishingService : IPublishingService
             Id = record.Id,
             DatasetName = record.DatasetName,
             Description = record.Description,
+            OriginalPrompt = record.OriginalPrompt,
+            ScenarioParameters = record.ScenarioParameters,
             Status = record.Status,
             CreatedAt = record.CreatedAt,
             PublishedAt = record.PublishedAt,
@@ -391,5 +394,43 @@ public class PublishingService : IPublishingService
         }
 
         return value;
+    }
+
+    public async Task<byte[]> DownloadDatasetCsvAsync(string id)
+    {
+        try
+        {
+            var publishRecord = await GetPublishRecordAsync(id);
+            if (publishRecord == null)
+            {
+                throw new FileNotFoundException($"Dataset with ID {id} not found");
+            }
+
+            var csv = new StringBuilder();
+            
+            // Add CSV header
+            csv.AppendLine("TagName,Description,Time,Value,DataType,Unit");
+
+            // Add data for each tag
+            foreach (var tag in publishRecord.Tags)
+            {
+                foreach (var dataPoint in tag.TimeSeriesData)
+                {
+                    csv.AppendLine($"{EscapeCsvValue(tag.TagName)}," +
+                                 $"{EscapeCsvValue(tag.Description)}," +
+                                 $"{EscapeCsvValue(dataPoint.Time)}," +
+                                 $"{dataPoint.Value}," +
+                                 $"{EscapeCsvValue(tag.DataType)}," +
+                                 $"{EscapeCsvValue(tag.Unit)}");
+                }
+            }
+
+            return System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating CSV for dataset {DatasetId}", id);
+            throw;
+        }
     }
 }
