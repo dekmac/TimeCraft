@@ -21,6 +21,12 @@ export interface TagProgress extends GeneratedTag {
 
 export interface GenerateTagsRequest {
   Text: string;
+  timeHorizon?: {
+    period: number;
+    unit: 'minutes' | 'hours' | 'days' | 'weeks';
+    granularity: 'minute' | 'hour' | 'day';
+    totalPoints: number;
+  };
 }
 
 export interface GenerateTagsResponse {
@@ -32,6 +38,14 @@ export interface GenerateTagsResponse {
 export interface GenerateTimeSeriesRequest {
     tag: string;
     scenario: string;
+    timeHorizon?: {
+        period: number;
+        unit: 'minutes' | 'hours' | 'days' | 'weeks';
+        granularity: 'minute' | 'hour' | 'day';
+        totalPoints: number;
+        batchSize?: number;
+        batchIndex?: number;
+    };
 }
 
 export interface GenerateTimeSeriesResponse {

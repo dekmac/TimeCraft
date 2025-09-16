@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import type { TimeSeriesData, GeneratedTag, TagProgress, TagProgressStatus } from '../types/api';
 import { timeCraftApi } from '../services/timeCraftApi';
+import { TIME_HORIZON_OPTIONS, type TimeHorizonOption } from '../types/timeHorizon';
 
 export const useTimeCraft = () => {
   const [description, setDescription] = useState('');
-  const [dataLength, setDataLength] = useState(100);
+  const [timeHorizon, setTimeHorizon] = useState<TimeHorizonOption>(TIME_HORIZON_OPTIONS[2]); // Default to 24 hours
   const [isLoading, setIsLoading] = useState(false);
   const [tags, setTags] = useState<GeneratedTag[]>([]);
   const [tagProgress, setTagProgress] = useState<TagProgress[]>([]);
@@ -90,33 +91,95 @@ export const useTimeCraft = () => {
     try {
       console.log(`Retrying time series generation for tag: ${tag.tag}`);
       
-      const tsResponse = await timeCraftApi.generateTimeSeries({
-        tag: tag.tag,
-        scenario: description
-      });
+      // Handle batching for large datasets
+      if (timeHorizon.batchCount > 1) {
+        console.log(`Retrying ${timeHorizon.batchCount} batches for large dataset`);
+        
+        let allData: number[] = [];
+        let allTimestamps: string[] = [];
+        
+        // Generate data in batches
+        for (let batchIndex = 0; batchIndex < timeHorizon.batchCount; batchIndex++) {
+          const batchResponse = await timeCraftApi.generateTimeSeries({
+            tag: tag.tag,
+            scenario: description,
+            timeHorizon: {
+              period: timeHorizon.config.period,
+              unit: timeHorizon.config.unit,
+              granularity: timeHorizon.config.granularity,
+              totalPoints: timeHorizon.totalPoints,
+              batchSize: 500,
+              batchIndex: batchIndex
+            }
+          });
 
-      if (!tsResponse.success) {
-        throw new Error(tsResponse.message || 'Failed to generate time series');
+          if (!batchResponse.success) {
+            throw new Error(batchResponse.message || `Failed to generate batch ${batchIndex + 1}`);
+          }
+
+          allData.push(...batchResponse.timeSeries);
+          if (batchResponse.timestamps) {
+            allTimestamps.push(...batchResponse.timestamps);
+          }
+        }
+        
+        // Create time series data from combined batches
+        const timeSeriesEntry: TimeSeriesData = {
+          name: tag.tag,
+          data: allData,
+          timestamps: allTimestamps.length > 0 ? allTimestamps : undefined
+        };
+
+        // Update progress with completed time series
+        updateTagProgress(tagIndex, { 
+          status: 'complete',
+          timeSeriesData: timeSeriesEntry
+        });
+
+        // Add to time series data (replace if exists)
+        setTimeSeriesData(prev => {
+          const filtered = prev.filter(ts => ts.name !== timeSeriesEntry.name);
+          return [...filtered, timeSeriesEntry];
+        });
+        
+      } else {
+        // Single batch retry
+        const tsResponse = await timeCraftApi.generateTimeSeries({
+          tag: tag.tag,
+          scenario: description,
+          timeHorizon: {
+            period: timeHorizon.config.period,
+            unit: timeHorizon.config.unit,
+            granularity: timeHorizon.config.granularity,
+            totalPoints: timeHorizon.totalPoints,
+            batchSize: undefined,
+            batchIndex: 0
+          }
+        });
+
+        if (!tsResponse.success) {
+          throw new Error(tsResponse.message || 'Failed to generate time series');
+        }
+
+        // Create time series data
+        const timeSeriesEntry: TimeSeriesData = {
+          name: tsResponse.tagName,
+          data: tsResponse.timeSeries,
+          timestamps: tsResponse.timestamps
+        };
+
+        // Update progress with completed time series
+        updateTagProgress(tagIndex, { 
+          status: 'complete',
+          timeSeriesData: timeSeriesEntry
+        });
+
+        // Add to time series data (replace if exists)
+        setTimeSeriesData(prev => {
+          const filtered = prev.filter(ts => ts.name !== timeSeriesEntry.name);
+          return [...filtered, timeSeriesEntry];
+        });
       }
-
-      // Create time series data
-      const timeSeriesEntry: TimeSeriesData = {
-        name: tsResponse.tagName,
-        data: tsResponse.timeSeries,
-        timestamps: tsResponse.timestamps
-      };
-
-      // Update progress with completed time series
-      updateTagProgress(tagIndex, { 
-        status: 'complete',
-        timeSeriesData: timeSeriesEntry
-      });
-
-      // Add to time series data (replace if exists)
-      setTimeSeriesData(prev => {
-        const filtered = prev.filter(ts => ts.name !== timeSeriesEntry.name);
-        return [...filtered, timeSeriesEntry];
-      });
 
     } catch (tagError: unknown) {
       console.error(`Error retrying time series for tag ${tag.tag}:`, tagError);
@@ -139,7 +202,15 @@ export const useTimeCraft = () => {
       console.log('Generating tags for description:', description);
       
       // Step 1: Generate tags
-      const tagsResponse = await timeCraftApi.generateTags({ Text: description });
+      const tagsResponse = await timeCraftApi.generateTags({ 
+        Text: description,
+        timeHorizon: {
+          period: timeHorizon.config.period,
+          unit: timeHorizon.config.unit,
+          granularity: timeHorizon.config.granularity,
+          totalPoints: timeHorizon.totalPoints
+        }
+      });
       
       if (!tagsResponse.success || !tagsResponse.tags) {
         throw new Error(tagsResponse.message || 'Failed to generate tags');
@@ -180,30 +251,91 @@ export const useTimeCraft = () => {
 
           console.log(`Generating time series for tag: ${tag.tag}`);
           
-          const tsResponse = await timeCraftApi.generateTimeSeries({
-            tag: tag.tag,
-            scenario: description
-          });
+          // Handle batching for large datasets
+          if (timeHorizon.batchCount > 1) {
+            console.log(`Generating ${timeHorizon.batchCount} batches for large dataset (${timeHorizon.totalPoints} points)`);
+            
+            let allData: number[] = [];
+            let allTimestamps: string[] = [];
+            
+            // Generate data in batches
+            for (let batchIndex = 0; batchIndex < timeHorizon.batchCount; batchIndex++) {
+              console.log(`Generating batch ${batchIndex + 1}/${timeHorizon.batchCount}`);
+              
+              const batchResponse = await timeCraftApi.generateTimeSeries({
+                tag: tag.tag,
+                scenario: description,
+                timeHorizon: {
+                  period: timeHorizon.config.period,
+                  unit: timeHorizon.config.unit,
+                  granularity: timeHorizon.config.granularity,
+                  totalPoints: timeHorizon.totalPoints,
+                  batchSize: 500,
+                  batchIndex: batchIndex
+                }
+              });
 
-          if (!tsResponse.success) {
-            throw new Error(tsResponse.message || 'Failed to generate time series');
+              if (!batchResponse.success) {
+                throw new Error(batchResponse.message || `Failed to generate batch ${batchIndex + 1}`);
+              }
+
+              allData.push(...batchResponse.timeSeries);
+              if (batchResponse.timestamps) {
+                allTimestamps.push(...batchResponse.timestamps);
+              }
+            }
+            
+            // Create time series data from combined batches
+            const timeSeriesEntry: TimeSeriesData = {
+              name: tag.tag,
+              data: allData,
+              timestamps: allTimestamps.length > 0 ? allTimestamps : undefined
+            };
+
+            // Update progress with completed time series
+            updateTagProgress(tagIndex, { 
+              status: 'complete',
+              timeSeriesData: timeSeriesEntry
+            });
+
+            // Add to time series data immediately
+            setTimeSeriesData(prev => [...prev, timeSeriesEntry]);
+            
+          } else {
+            // Single batch generation
+            const tsResponse = await timeCraftApi.generateTimeSeries({
+              tag: tag.tag,
+              scenario: description,
+              timeHorizon: {
+                period: timeHorizon.config.period,
+                unit: timeHorizon.config.unit,
+                granularity: timeHorizon.config.granularity,
+                totalPoints: timeHorizon.totalPoints,
+                batchSize: undefined,
+                batchIndex: 0
+              }
+            });
+
+            if (!tsResponse.success) {
+              throw new Error(tsResponse.message || 'Failed to generate time series');
+            }
+
+            // Create time series data
+            const timeSeriesEntry: TimeSeriesData = {
+              name: tsResponse.tagName,
+              data: tsResponse.timeSeries,
+              timestamps: tsResponse.timestamps
+            };
+
+            // Update progress with completed time series
+            updateTagProgress(tagIndex, { 
+              status: 'complete',
+              timeSeriesData: timeSeriesEntry
+            });
+
+            // Add to time series data immediately
+            setTimeSeriesData(prev => [...prev, timeSeriesEntry]);
           }
-
-          // Create time series data
-          const timeSeriesEntry: TimeSeriesData = {
-            name: tsResponse.tagName,
-            data: tsResponse.timeSeries,
-            timestamps: tsResponse.timestamps
-          };
-
-          // Update progress with completed time series
-          updateTagProgress(tagIndex, { 
-            status: 'complete',
-            timeSeriesData: timeSeriesEntry
-          });
-
-          // Add to time series data immediately
-          setTimeSeriesData(prev => [...prev, timeSeriesEntry]);
 
         } catch (tagError: unknown) {
           console.error(`Error generating time series for tag ${tag.tag}:`, tagError);
@@ -240,8 +372,8 @@ export const useTimeCraft = () => {
   return {
     description,
     setDescription,
-    dataLength,
-    setDataLength,
+    timeHorizon,
+    setTimeHorizon,
     isLoading,
     tags,
     tagProgress,

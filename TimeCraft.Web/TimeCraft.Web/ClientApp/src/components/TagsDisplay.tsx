@@ -6,11 +6,12 @@ import { PublishDatasetModal } from './PublishDatasetModal';
 import { useAnomaly } from '../hooks/useAnomaly';
 import { timeCraftApi } from '../services/timeCraftApi';
 import type { GeneratedTag, TagProgress, TagProgressStatus, TimeSeriesData, EventHubConfig, TimeSeriesDataPoint } from '../types/api';
+import type { TimeHorizonOption } from '../types/timeHorizon';
 
 interface TagsDisplayProps {
   tags: GeneratedTag[];
   tagProgress?: TagProgress[];
-  dataLength: number;
+  timeHorizon: TimeHorizonOption;
   onRetryTag?: (tagIndex: number) => void;
   onUpdateTagData?: (tagIndex: number, newData: number[], newTimestamps?: string[]) => void;
 }
@@ -72,7 +73,7 @@ const getStatusColor = (status: TagProgressStatus) => {
   }
 };
 
-export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dataLength, onRetryTag, onUpdateTagData }) => {
+export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, timeHorizon, onRetryTag, onUpdateTagData }) => {
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [datasetModalOpen, setDatasetModalOpen] = useState(false);
   const [selectedTagForPublish, setSelectedTagForPublish] = useState<{index: number; tag: GeneratedTag; data: TimeSeriesData} | null>(null);
@@ -271,7 +272,7 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dat
                   <MiniTimeSeriesChart 
                     data={progress.timeSeriesData.data} 
                     tagName={tag.tag}
-                    dataLength={dataLength}
+                    timeHorizon={timeHorizon}
                     selectedInjectionPoint={selectedInjectionPoints.get(index)}
                     isInteractive={status === 'complete'}
                     onPointClick={(pointIndex) => selectInjectionPoint(index, pointIndex)}
@@ -406,7 +407,7 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, dat
         isOpen={datasetModalOpen}
         onClose={handleCloseDatasetModal}
         tags={tagProgress || []}
-        dataLength={dataLength}
+        timeHorizon={timeHorizon}
         onPublishSuccess={handleDatasetPublishSuccess}
       />
     </div>

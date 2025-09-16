@@ -34,7 +34,17 @@ public class PythonApiService : IPythonApiService
                 request.Text
             );
 
-            var json = JsonSerializer.Serialize(new { text_description = request.Text });
+            var json = JsonSerializer.Serialize(new 
+            { 
+                text_description = request.Text,
+                time_horizon = request.TimeHorizon != null ? new
+                {
+                    period = request.TimeHorizon.Period,
+                    unit = request.TimeHorizon.Unit,
+                    granularity = request.TimeHorizon.Granularity,
+                    total_points = request.TimeHorizon.TotalPoints
+                } : null
+            });
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var response = await _httpClient.PostAsync(
@@ -48,11 +58,62 @@ public class PythonApiService : IPythonApiService
 
             var result = JsonSerializer.Deserialize<JsonElement>(responseJson);
 
-            // Check if response has expected structure
-            if (!result.TryGetProperty("tags", out var tagsElement))
+            var tags = new List<GeneratedTag>();
+
+            // Check for enhanced response structure first (with tag_details)
+            if (result.TryGetProperty("tag_details", out var tagDetailsElement) && 
+                tagDetailsElement.ValueKind == JsonValueKind.Array)
+            {
+                _logger.LogInformation("Processing enhanced tag response with tag_details");
+                
+                foreach (var tagDetailElement in tagDetailsElement.EnumerateArray())
+                {
+                    if (tagDetailElement.ValueKind == JsonValueKind.Object)
+                    {
+                        var tagName = tagDetailElement.TryGetProperty("tag", out var tagProp) 
+                            ? tagProp.GetString() ?? string.Empty 
+                            : string.Empty;
+                        var unit = tagDetailElement.TryGetProperty("unit", out var unitProp) 
+                            ? unitProp.GetString() ?? "units" 
+                            : "units";
+                        var description = tagDetailElement.TryGetProperty("description", out var descProp) 
+                            ? descProp.GetString() ?? $"{tagName} sensor" 
+                            : $"{tagName} sensor";
+
+                        if (!string.IsNullOrEmpty(tagName))
+                        {
+                            tags.Add(new GeneratedTag
+                            {
+                                Tag = tagName,
+                                Description = $"{description} ({unit})"
+                            });
+                        }
+                    }
+                }
+            }
+            // Fallback to simple tags array (legacy format)
+            else if (result.TryGetProperty("tags", out var tagsElement) && 
+                     tagsElement.ValueKind == JsonValueKind.Array)
+            {
+                _logger.LogInformation("Processing legacy tag response with simple tags array");
+                
+                foreach (var tagElement in tagsElement.EnumerateArray())
+                {
+                    var tagName = tagElement.GetString() ?? string.Empty;
+                    if (!string.IsNullOrEmpty(tagName))
+                    {
+                        tags.Add(new GeneratedTag
+                        {
+                            Tag = tagName,
+                            Description = $"Generated tag: {tagName}"
+                        });
+                    }
+                }
+            }
+            else
             {
                 _logger.LogError(
-                    "Python API response missing 'tags' property: {Response}",
+                    "Python API response missing both 'tag_details' and 'tags' properties: {Response}",
                     responseJson
                 );
                 return new GenerateTagsResponse
@@ -61,25 +122,6 @@ public class PythonApiService : IPythonApiService
                     Message = "Invalid response format from Python API",
                     Tags = new List<GeneratedTag>()
                 };
-            }
-
-            var tags = new List<GeneratedTag>();
-            if (tagsElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var tagElement in tagsElement.EnumerateArray())
-                {
-                    var tagName = tagElement.GetString() ?? string.Empty;
-                    if (!string.IsNullOrEmpty(tagName))
-                    {
-                        tags.Add(
-                            new GeneratedTag
-                            {
-                                Tag = tagName,
-                                Description = $"Generated tag: {tagName}"
-                            }
-                        );
-                    }
-                }
             }
 
             return new GenerateTagsResponse
@@ -144,16 +186,28 @@ public class PythonApiService : IPythonApiService
                 request.Scenario
             );
 
+            // Calculate sequence length from time horizon or use default
+            int sequenceLength = request.TimeHorizon?.TotalPoints ?? 168;
+            
             // Python API expects tag_name and text_description fields
             var json = JsonSerializer.Serialize(
                 new
                 {
                     tag_name = request.Tag,
                     text_description = request.Scenario,
-                    sequence_length = 168,
+                    sequence_length = sequenceLength,
                     tag_index = 0,
                     model_name = "gpt-4o",
-                    temperature = 0.0
+                    temperature = 0.0,
+                    time_horizon = request.TimeHorizon != null ? new
+                    {
+                        period = request.TimeHorizon.Period,
+                        unit = request.TimeHorizon.Unit,
+                        granularity = request.TimeHorizon.Granularity,
+                        total_points = request.TimeHorizon.TotalPoints,
+                        batch_size = request.TimeHorizon.BatchSize,
+                        batch_index = request.TimeHorizon.BatchIndex
+                    } : null
                 }
             );
             var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -212,12 +266,34 @@ public class PythonApiService : IPythonApiService
                 }
             }
 
-            // Generate timestamps for the time series (assuming hourly data)
+            // Use timestamps from Python API response, or generate fallback timestamps
             var timestamps = new List<string>();
-            var startTime = DateTime.UtcNow.AddHours(-timeSeries.Count);
-            for (int i = 0; i < timeSeries.Count; i++)
+            
+            // Check if Python API returned timestamps
+            if (
+                result.TryGetProperty("timestamps", out var timestampsElement)
+                && timestampsElement.ValueKind == JsonValueKind.Array
+            )
             {
-                timestamps.Add(startTime.AddHours(i).ToString("yyyy-MM-ddTHH:mm:ssZ"));
+                foreach (var timestampItem in timestampsElement.EnumerateArray())
+                {
+                    if (timestampItem.ValueKind == JsonValueKind.String)
+                    {
+                        timestamps.Add(timestampItem.GetString() ?? "");
+                    }
+                }
+                _logger.LogInformation("Using {Count} timestamps returned from Python API", timestamps.Count);
+            }
+            
+            // Fallback: generate timestamps if not provided by Python API (for backward compatibility)
+            if (timestamps.Count == 0 && timeSeries.Count > 0)
+            {
+                var startTime = DateTime.UtcNow.AddHours(-timeSeries.Count);
+                for (int i = 0; i < timeSeries.Count; i++)
+                {
+                    timestamps.Add(startTime.AddHours(i).ToString("yyyy-MM-ddTHH:mm:ssZ"));
+                }
+                _logger.LogWarning("Generated fallback timestamps as Python API did not return timestamps");
             }
 
             return new GenerateTimeSeriesResponse

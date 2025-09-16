@@ -6,6 +6,16 @@ from typing import Optional, Dict, List
 from pydantic import BaseModel
 
 
+class TimeHorizonInfo(BaseModel):
+    """Time horizon configuration for time series generation."""
+    period: int
+    unit: str  # minutes, hours, days, weeks
+    granularity: str  # minute, hour, day
+    total_points: int
+    batch_size: Optional[int] = None
+    batch_index: Optional[int] = None
+
+
 class TimeSeriesGenerationRequest(BaseModel):
     """Request model for time series generation."""
     dataset_name: str
@@ -58,6 +68,7 @@ class AggregateTimeSeriesRequest(BaseModel):
     sequence_length: Optional[int] = 168
     model_name: Optional[str] = "gpt-4o"
     temperature: Optional[float] = 0.0
+    time_horizon: Optional[TimeHorizonInfo] = None
     openai_api_base: Optional[str] = None
     openai_api_version: Optional[str] = None
     openai_api_type: Optional[str] = None
@@ -69,6 +80,7 @@ class TagGenerationRequest(BaseModel):
     num_tags: Optional[int] = 5
     model_name: Optional[str] = "gpt-4o"
     temperature: Optional[float] = 0.0
+    time_horizon: Optional[TimeHorizonInfo] = None
 
 
 class TagGenerationResponse(BaseModel):
@@ -89,6 +101,7 @@ class SingleTimeSeriesRequest(BaseModel):
     tag_index: Optional[int] = 0
     model_name: Optional[str] = "gpt-4o"
     temperature: Optional[float] = 0.0
+    time_horizon: Optional[TimeHorizonInfo] = None
 
 
 class SingleTimeSeriesResponse(BaseModel):

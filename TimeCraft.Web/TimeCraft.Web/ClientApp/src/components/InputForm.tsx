@@ -1,10 +1,11 @@
 import React from 'react';
+import { TIME_HORIZON_OPTIONS, type TimeHorizonOption } from '../types/timeHorizon';
 
 interface InputFormProps {
   description: string;
   setDescription: (value: string) => void;
-  dataLength: number;
-  setDataLength: (value: number) => void;
+  timeHorizon: TimeHorizonOption;
+  setTimeHorizon: (value: TimeHorizonOption) => void;
   isLoading: boolean;
   onGenerate: () => void;
   onClearAll?: () => void;
@@ -14,8 +15,8 @@ interface InputFormProps {
 export const InputForm: React.FC<InputFormProps> = ({
   description,
   setDescription,
-  dataLength,
-  setDataLength,
+  timeHorizon,
+  setTimeHorizon,
   isLoading,
   onGenerate,
   onClearAll,
@@ -38,21 +39,32 @@ export const InputForm: React.FC<InputFormProps> = ({
         </div>
 
         <div className="flex items-center space-x-4">
-          <div>
-            <label htmlFor="dataLength" className="block text-sm font-medium text-gray-700 mb-1">
-              Data Length
+          <div className="flex-1">
+            <label htmlFor="timeHorizon" className="block text-sm font-medium text-gray-700 mb-1">
+              Time Horizon & Granularity
             </label>
             <select
-              id="dataLength"
-              value={dataLength}
-              onChange={(e) => setDataLength(Number(e.target.value))}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              id="timeHorizon"
+              value={timeHorizon.id}
+              onChange={(e) => {
+                const selectedOption = TIME_HORIZON_OPTIONS.find(opt => opt.id === e.target.value);
+                if (selectedOption) {
+                  setTimeHorizon(selectedOption);
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value={50}>50 points</option>
-              <option value={100}>100 points</option>
-              <option value={200}>200 points</option>
-              <option value={500}>500 points</option>
+              {TIME_HORIZON_OPTIONS.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.label} ({option.totalPoints} points{option.batchCount > 1 ? `, ${option.batchCount} batches` : ''})
+                </option>
+              ))}
             </select>
+            {timeHorizon.batchCount > 1 && (
+              <p className="text-xs text-orange-600 mt-1">
+                ⚠️ Large dataset will be processed in {timeHorizon.batchCount} batches of ~500 points each
+              </p>
+            )}
           </div>
 
           <div className="flex-1">

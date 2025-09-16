@@ -392,25 +392,36 @@ def generate_mock_target_aware_series(target_values: Optional[List[float]],
 
 
 def parse_llm_timeseries_response(response: str, target_length: int) -> List[float]:
-    """Parse LLM response to extract time series values."""
+    """Parse LLM response to extract time series values with NO MOCK FALLBACKS.
+    
+    CRITICAL: This function will NEVER generate synthetic/mock data.
+    If parsing fails or LLM is unavailable, returns empty list.
+    """
     time_series_str = response.strip()
+    if not time_series_str:
+        print("⚠️ Empty LLM response; returning empty timeseries (no mock data)")
+        return []
+        
     if "Time Series:" in time_series_str:
         time_series_str = time_series_str.split("Time Series:")[-1].strip()
     
-    # Convert to list of floats
+    # Convert to list of floats - NO MOCK FALLBACK
     try:
         time_series = [float(val.strip()) for val in time_series_str.split(',') if val.strip()]
-    except ValueError:
-        # If parsing fails, generate a simple mock series
-        time_series = [float(i % 10 + 1) for i in range(target_length)]
+    except ValueError as e:
+        print(f"⚠️ LLM response parsing failed: {e}; returning empty timeseries (no mock data)")
+        return []
     
-    # Ensure we have exactly target_length points
-    if len(time_series) < target_length:
-        # Extend by repeating the pattern
-        while len(time_series) < target_length:
-            time_series.extend(time_series[:min(len(time_series), target_length - len(time_series))])
-    elif len(time_series) > target_length:
-        time_series = time_series[:target_length]
+    if not time_series:
+        print("⚠️ No numeric values extracted from LLM response; returning empty timeseries (no mock data)")
+        return []
+    
+    # Accept any length - truncate if longer, keep as-is if shorter (consistent with main parser)
+    if len(time_series) > target_length:
+        print(f"ℹ️ Parsed {len(time_series)} values; expected {target_length}. Truncating to expected length.")
+        return time_series[:target_length]
+    elif len(time_series) < target_length:
+        print(f"ℹ️ Parsed {len(time_series)} (<{target_length}) values. Accepting short series without padding.")
     
     return time_series
 
