@@ -149,7 +149,32 @@ export const calculateTotalPoints = (config: TimeHorizonConfig): number => {
 };
 
 export const generateTimestamps = (config: TimeHorizonConfig, startDate?: Date): string[] => {
-  const start = startDate || new Date();
+  let start: Date;
+  
+  if (startDate) {
+    start = startDate;
+  } else {
+    // For daily patterns, start at midnight (00:00) of today for realistic time alignment
+    // This ensures temperature peaks at afternoon, occupancy patterns align correctly, etc.
+    
+    // Use midnight start for:
+    // - Daily patterns (24 hours or 1-7 days)
+    // - Weekly patterns (up to 7 days)
+    const shouldStartMidnight = (
+      (config.unit === 'hours' && config.period === 24) ||  // 24-hour daily pattern
+      (config.unit === 'days' && config.period <= 7)        // Weekly patterns
+    );
+    
+    if (shouldStartMidnight) {
+      // For daily/weekly patterns, start at midnight
+      const now = new Date();
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    } else {
+      // For longer periods or non-daily patterns, use current time
+      start = new Date();
+    }
+  }
+  
   const timestamps: string[] = [];
   const totalPoints = calculateTotalPoints(config);
   

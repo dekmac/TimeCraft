@@ -32,7 +32,25 @@ print(f"🔧 TimeSeries Config - STRICT_LENGTH: {TIMESERIES_STRICT_LENGTH}, AUTO
 def generate_timestamps_for_horizon(time_horizon, sequence_length: int) -> List[str]:
     """Generate timestamp array for a given time horizon configuration."""
     timestamps = []
-    start_time = datetime.now()
+    
+    # For daily patterns, start at midnight (00:00) of today for realistic time alignment
+    # This ensures temperature peaks at afternoon, occupancy patterns align correctly, etc.
+    
+    # Use midnight start for:
+    # - Daily patterns (24 hours or 1-7 days)
+    # - Weekly patterns (up to 7 days)
+    should_start_midnight = (
+        (time_horizon.unit == 'hours' and time_horizon.period == 24) or  # 24-hour daily pattern
+        (time_horizon.unit == 'days' and time_horizon.period <= 7)       # Weekly patterns
+    )
+    
+    if should_start_midnight:
+        # For daily/weekly patterns, start at midnight
+        now = datetime.now()
+        start_time = datetime(now.year, now.month, now.day, 0, 0, 0)
+    else:
+        # For longer periods, use current time
+        start_time = datetime.now()
     
     # Calculate interval based on granularity
     if time_horizon.granularity == 'minute':
@@ -847,6 +865,97 @@ def reflect_on_timeseries_generation(tag_name: str, description: str,
                            current_values != generated_values)
 
 
+def extract_scenario_constraints(description: str, tag_name: str, tag_unit: str) -> dict:
+    """Extract specific constraints from scenario description for this sensor type."""
+    constraints = {
+        'range_min': None,
+        'range_max': None,
+        'daily_variation': None,
+        'patterns': None,
+        'specific_rules': []
+    }
+    
+    desc_lower = description.lower()
+    tag_lower = tag_name.lower()
+    unit_lower = tag_unit.lower()
+    
+    # Temperature constraints
+    if 'temp' in tag_lower or '°c' in unit_lower or 'celsius' in unit_lower:
+        # Look for "Temperature (°C): Long-term range 18–26 °C. For a single day, generate smooth curves within ±2 °C variance"
+        import re
+        temp_match = re.search(r'temperature.*?(\d+)[–-](\d+)\s*°?c.*?±(\d+)\s*°?c', desc_lower)
+        if temp_match:
+            constraints['range_min'] = int(temp_match.group(1))
+            constraints['range_max'] = int(temp_match.group(2))
+            constraints['daily_variation'] = int(temp_match.group(3))
+            constraints['specific_rules'] = [
+                f"STRICT RANGE: {constraints['range_min']}°C to {constraints['range_max']}°C (long-term seasonal range)",
+                f"DAILY CONSTRAINT: For single day, stay within ±{constraints['daily_variation']}°C of starting point",
+                "PATTERN: Smooth curves - cool night → gradual morning rise → peak afternoon → gradual fall",
+                "NO extreme swings outside specified range"
+            ]
+    
+    # Humidity constraints  
+    elif 'hum' in tag_lower or '%' in unit_lower:
+        # Look for "Humidity (%): Long-term range 40–70%. For a single day, values should stay mostly flat with only ±2–3% variation"
+        import re
+        hum_match = re.search(r'humidity.*?(\d+)[–-](\d+)%.*?±(\d+)[–-]?(\d+)?%', desc_lower)
+        if hum_match:
+            constraints['range_min'] = int(hum_match.group(1))
+            constraints['range_max'] = int(hum_match.group(2))
+            daily_var = hum_match.group(3)
+            constraints['daily_variation'] = int(daily_var) if daily_var else 3
+            constraints['specific_rules'] = [
+                f"STRICT RANGE: {constraints['range_min']}% to {constraints['range_max']}% (long-term range)",
+                f"DAILY CONSTRAINT: Stay mostly flat with only ±{constraints['daily_variation']}% variation",
+                "PATTERN: Indoor humidity changes slowly - avoid rapid fluctuations"
+            ]
+    
+    # Fissurometer/crack constraints
+    elif 'fiss' in tag_lower or 'crack' in tag_lower or 'mm' in unit_lower:
+        # Look for "Fissurometer (crack width, mm): Long-term range 0.5–2.0 mm. For a single day, keep values stable with only minimal jitter (±0.05 mm)"
+        import re
+        crack_match = re.search(r'fissurometer.*?(\d+\.?\d*)[–-](\d+\.?\d*)\s*mm.*?±(\d+\.?\d*)\s*mm', desc_lower)
+        if crack_match:
+            constraints['range_min'] = float(crack_match.group(1))
+            constraints['range_max'] = float(crack_match.group(2))
+            constraints['daily_variation'] = float(crack_match.group(3))
+            constraints['specific_rules'] = [
+                f"STRICT RANGE: {constraints['range_min']}mm to {constraints['range_max']}mm (long-term range)",
+                f"DAILY CONSTRAINT: Keep stable with only ±{constraints['daily_variation']}mm jitter",
+                "PATTERN: Very stable measurements with minimal thermal expansion effects"
+            ]
+    
+    # Occupancy constraints
+    elif 'occ' in tag_lower or 'people' in unit_lower:
+        # Look for "Occupancy (people): Range 0–60. Strong daily patterns: peak during morning tours (~10–12h) and afternoon (~14–16h)"
+        import re
+        occ_match = re.search(r'occupancy.*?(\d+)[–-](\d+).*?morning.*?(\d+)[–-](\d+)h.*?afternoon.*?(\d+)[–-](\d+)h', desc_lower)
+        if occ_match:
+            constraints['range_min'] = int(occ_match.group(1))
+            constraints['range_max'] = int(occ_match.group(2))
+            constraints['specific_rules'] = [
+                f"STRICT RANGE: {constraints['range_min']} to {constraints['range_max']} people",
+                f"DAILY PATTERN: Peak morning tours (10-12h), peak afternoon (14-16h)",
+                "PATTERN: Low overnight (1-3), gradual rise, tour peaks, evening decline",
+                "Near zero overnight but never completely empty (security/maintenance)"
+            ]
+    
+    # CO2 constraints (usually correlates with occupancy)
+    elif 'co2' in tag_lower or 'ppm' in unit_lower:
+        # Set reasonable defaults for CO2 in buildings
+        constraints['range_min'] = 400
+        constraints['range_max'] = 1200
+        constraints['specific_rules'] = [
+            "BASELINE: 400-450 ppm (outdoor level) during low occupancy",
+            "OCCUPIED: 500-800 ppm during normal occupancy, up to 1000+ during peak tours",
+            "PATTERN: Follow occupancy patterns with 15-30 minute lag",
+            "CORRELATION: Higher occupancy = higher CO2 with realistic building ventilation"
+        ]
+    
+    return constraints
+
+
 def get_sensor_specific_guidance(tag_name: str, tag_unit: str, time_horizon=None, sequence_length: int = 288) -> str:
     """Generate focused, sensor-specific guidance for realistic timeseries generation."""
     
@@ -921,29 +1030,50 @@ CRITICAL RULES:
 • Include natural micro-variations even in stable conditions"""
 
 
-def get_gpt5mini_optimized_prompt(tag_name: str, tag_unit: str, sequence_length: int, time_horizon=None) -> str:
+def get_gpt5mini_optimized_prompt(tag_name: str, tag_unit: str, sequence_length: int, time_horizon=None, description: str = "") -> str:
     """Generate a minimal, direct prompt optimized for GPT-5-mini's sensitivity."""
     
-    # Determine sensor type for simple ranges
-    tag_lower = tag_name.lower()
+    # Extract constraints from description if provided
+    if description:
+        constraints = extract_scenario_constraints(description, tag_name, tag_unit)
+        if constraints['range_min'] is not None and constraints['range_max'] is not None:
+            if constraints['daily_variation']:
+                range_info = f"{constraints['range_min']}-{constraints['range_max']} {tag_unit} (daily ±{constraints['daily_variation']} {tag_unit})"
+            else:
+                range_info = f"{constraints['range_min']}-{constraints['range_max']} {tag_unit}"
+        else:
+            # Fallback to generic ranges
+            range_info = f"realistic {tag_unit} values"
+    else:
+        # Original fallback logic
+        tag_lower = tag_name.lower()
+        
+        if 'temp' in tag_lower:
+            range_info = "18-26°C with daily variations"
+        elif 'humidity' in tag_lower or 'hum' in tag_lower:
+            range_info = "45-65% with natural fluctuations"
+        elif 'occupancy' in tag_lower or 'occ' in tag_lower or 'count' in tag_lower:
+            range_info = "0-60 people with tour patterns"
+        elif 'co2' in tag_lower:
+            range_info = "400-1200 ppm based on occupancy"
+        elif 'crack' in tag_lower or 'fiss' in tag_lower or 'width' in tag_lower:
+            range_info = "0.5-2.0 mm with minimal changes"
+        else:
+            range_info = f"realistic {tag_unit} values"
     
+    # Pattern info based on sensor type
+    tag_lower = tag_name.lower()
     if 'temp' in tag_lower:
-        range_info = "18-26°C with daily variations"
         pattern = "smooth daily curve"
     elif 'humidity' in tag_lower or 'hum' in tag_lower:
-        range_info = "45-65% with natural fluctuations"
         pattern = "varies with temperature"
     elif 'occupancy' in tag_lower or 'occ' in tag_lower or 'count' in tag_lower:
-        range_info = "0-60 people with tour patterns"
         pattern = "peaks during tour times"
     elif 'co2' in tag_lower:
-        range_info = "400-1200 ppm based on occupancy"
         pattern = "follows visitor patterns"
     elif 'crack' in tag_lower or 'fiss' in tag_lower or 'width' in tag_lower:
-        range_info = "0.5-2.0 mm with minimal changes"
         pattern = "very stable with micro-variations"
     else:
-        range_info = f"realistic {tag_unit} values"
         pattern = "appropriate for sensor type"
     
     # Time info
@@ -1743,17 +1873,35 @@ def generate_timeseries_with_llm(tag_name: str, description: str,
         
         if is_gpt5_mini:
             # Use the dynamic GPT-5-mini optimized prompt function
-            enhanced_prompt = get_gpt5mini_optimized_prompt(tag_name, tag_unit, sequence_length, time_horizon)
+            enhanced_prompt = get_gpt5mini_optimized_prompt(tag_name, tag_unit, sequence_length, time_horizon, description)
             print(f"🔧 Using GPT-5-mini optimized prompt")
             print(f"📋 GPT-5-mini prompt preview (first 300 chars):")
             print(f"    {enhanced_prompt[:300]}...")
         else:
-            # Original enhanced prompt for other models
+            # Extract specific constraints from the scenario description
+            constraints = extract_scenario_constraints(description, tag_name, tag_unit)
+            
+            # Build constraint-aware prompt
+            constraint_rules = ""
+            if constraints['specific_rules']:
+                constraint_rules = "\n".join([f"• {rule}" for rule in constraints['specific_rules']])
+                constraint_rules = f"\nSPECIFIC CONSTRAINTS FOR {tag_name}:\n{constraint_rules}\n"
+            
+            # Original enhanced prompt for other models with constraints
             enhanced_prompt = f"""Generate {sequence_length} realistic sensor values for: {tag_name} ({tag_unit})
 
-SCENARIO: {description}
+SCENARIO CONTEXT: {description[:200]}...
+
+{constraint_rules}
 
 {sensor_guidance}
+
+CRITICAL COMPLIANCE:
+• MUST follow the specific constraints above for {tag_name}
+• MUST stay within specified ranges and daily variation limits
+• MUST follow realistic patterns described in scenario
+• NO values outside the specified ranges
+• NO unrealistic linear progressions or constant values
 
 OUTPUT FORMAT:
 Your response must be ONLY comma-separated numbers. Start with a number, not text.

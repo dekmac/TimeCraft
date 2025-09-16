@@ -25,7 +25,22 @@ export const MiniTimeSeriesChart: React.FC<MiniTimeSeriesChartProps> = ({
   // Generate proper time-based labels that correspond to actual time periods
   const getTimeLabels = () => {
     const totalPoints = data.length;
-    const now = new Date();
+    
+    // For daily patterns, start at midnight (00:00) of today for realistic time alignment
+    // This ensures temperature peaks at afternoon, occupancy patterns align correctly, etc.
+    let startTime: Date;
+    if (timeHorizon.config.unit === 'hours' && timeHorizon.config.period === 24) {
+      // For 24-hour daily patterns, start at midnight
+      const now = new Date();
+      startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    } else if (timeHorizon.config.unit === 'days' && timeHorizon.config.period <= 7) {
+      // For weekly patterns, start at midnight
+      const now = new Date();
+      startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    } else {
+      // For longer periods, use current time (but still calculate backwards)
+      startTime = new Date();
+    }
     
     // Determine the interval between data points based on time horizon
     let intervalMs: number;
@@ -79,9 +94,16 @@ export const MiniTimeSeriesChart: React.FC<MiniTimeSeriesChartProps> = ({
       }
     }
     
-    // Calculate start time (going backwards from now)
-    const totalTimeMs = (totalPoints - 1) * intervalMs;
-    const startTime = new Date(now.getTime() - totalTimeMs);
+    // Calculate actual start time (forward from midnight for daily patterns)
+    // For daily patterns (24 hours or ≤7 days), startTime is already set to midnight
+    // For longer periods, we calculate backwards from current time
+    if (timeHorizon.config.unit !== 'hours' || timeHorizon.config.period !== 24) {
+      if (timeHorizon.config.unit !== 'days' || timeHorizon.config.period > 7) {
+        // For longer periods, calculate backwards from current time
+        const totalTimeMs = (totalPoints - 1) * intervalMs;
+        startTime = new Date(startTime.getTime() - totalTimeMs);
+      }
+    }
     
     // For mini charts, show fewer labels to avoid crowding
     const maxLabels = 5;
@@ -139,7 +161,21 @@ export const MiniTimeSeriesChart: React.FC<MiniTimeSeriesChartProps> = ({
             if (index !== undefined) {
               // Calculate actual timestamp for tooltip
               const totalPoints = data.length;
-              const now = new Date();
+              
+              // Use same midnight logic as the main chart
+              let startTime: Date;
+              if (timeHorizon.config.unit === 'hours' && timeHorizon.config.period === 24) {
+                // For 24-hour daily patterns, start at midnight
+                const now = new Date();
+                startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+              } else if (timeHorizon.config.unit === 'days' && timeHorizon.config.period <= 7) {
+                // For weekly patterns, start at midnight
+                const now = new Date();
+                startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+              } else {
+                // For longer periods, use current time and calculate backwards
+                startTime = new Date();
+              }
               
               let intervalMs: number;
               if (timeHorizon.id === '24hours_5min') {
@@ -152,8 +188,14 @@ export const MiniTimeSeriesChart: React.FC<MiniTimeSeriesChartProps> = ({
                 intervalMs = 60 * 60 * 1000; // default 1 hour
               }
               
-              const totalTimeMs = (totalPoints - 1) * intervalMs;
-              const startTime = new Date(now.getTime() - totalTimeMs);
+              // For longer periods, calculate backwards from current time
+              if (timeHorizon.config.unit !== 'hours' || timeHorizon.config.period !== 24) {
+                if (timeHorizon.config.unit !== 'days' || timeHorizon.config.period > 7) {
+                  const totalTimeMs = (totalPoints - 1) * intervalMs;
+                  startTime = new Date(startTime.getTime() - totalTimeMs);
+                }
+              }
+              
               const pointTime = new Date(startTime.getTime() + (index * intervalMs));
               
               return pointTime.toLocaleString('en-US', {
