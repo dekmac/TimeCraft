@@ -28,6 +28,27 @@ public class OpcUaDeltaFramePublisher : IOpcUaDeltaFramePublisher
         };
     }
 
+    private DateTime GetDatasetBaselineTimestamp(PublishRecord publishRecord)
+    {
+        DateTime? earliestTime = null;
+        
+        foreach (var tag in publishRecord.Tags)
+        {
+            foreach (var dataPoint in tag.TimeSeriesData)
+            {
+                if (DateTime.TryParse(dataPoint.Time, out var parsedTime))
+                {
+                    if (earliestTime == null || parsedTime < earliestTime)
+                    {
+                        earliestTime = parsedTime;
+                    }
+                }
+            }
+        }
+        
+        return earliestTime ?? DateTime.UtcNow;
+    }
+
     public async Task PublishDatasetAsync(PublishRecord publishRecord, CancellationToken cancellationToken = default)
     {
         if (publishRecord?.EventHubConfig == null || publishRecord.Tags == null)
@@ -45,12 +66,19 @@ public class OpcUaDeltaFramePublisher : IOpcUaDeltaFramePublisher
             // Create the Event Hub producer client
             producer = CreateEventHubProducer(publishRecord.EventHubConfig);
 
-            // Update status to in progress
+            // Update status to in progress and set publish start time for timestamp calculations
             publishRecord.Status = PublishingStatus.InProgress;
+            publishRecord.PublishedAt = DateTime.UtcNow; // Set this early so we can use it as the anchor time
             publishRecord.PublishedDataPoints = 0;
 
             // Calculate total data points across all tags
             publishRecord.TotalDataPoints = publishRecord.Tags.Sum(tag => tag.TimeSeriesData.Count);
+
+            // Calculate the baseline timestamp from the earliest data point in the entire dataset
+            var datasetBaselineTime = GetDatasetBaselineTimestamp(publishRecord);
+            
+            // Use PublishedAt as the actual start time for the simulation
+            var publishStartTime = publishRecord.PublishedAt.Value;
 
             // Get the maximum number of data points from any tag for synchronization
             var maxDataPoints = publishRecord.Tags.Max(tag => tag.TimeSeriesData.Count);
@@ -68,7 +96,7 @@ public class OpcUaDeltaFramePublisher : IOpcUaDeltaFramePublisher
                     if (timeIndex < tag.TimeSeriesData.Count)
                     {
                         var dataPoint = new List<TimeSeriesDataPoint> { tag.TimeSeriesData[timeIndex] };
-                        var deltaFrame = CreateDeltaFrame(tag, dataPoint, publishRecord.OpcUaSettings, publishRecord.CurrentSequenceNumber++);
+                        var deltaFrame = CreateDeltaFrame(tag, dataPoint, publishRecord.OpcUaSettings, publishRecord.CurrentSequenceNumber++, datasetBaselineTime, publishStartTime);
                         deltaFrames.Add(deltaFrame);
                     }
                 }
@@ -95,7 +123,6 @@ public class OpcUaDeltaFramePublisher : IOpcUaDeltaFramePublisher
 
             // Mark as completed
             publishRecord.Status = PublishingStatus.Completed;
-            publishRecord.PublishedAt = DateTime.UtcNow;
             publishRecord.ErrorMessage = null;
 
             _logger.LogInformation("Successfully published dataset {DatasetName} with {TagCount} tags and {DataPointCount} total data points", 
@@ -126,7 +153,8 @@ public class OpcUaDeltaFramePublisher : IOpcUaDeltaFramePublisher
         }
     }
 
-    public OpcUaDeltaFrame CreateDeltaFrame(DatasetTag tag, List<TimeSeriesDataPoint> dataPoints, OpcUaSettings opcUaSettings, int sequenceNumber)
+    public OpcUaDeltaFrame CreateDeltaFrame(DatasetTag tag, List<TimeSeriesDataPoint> dataPoints, OpcUaSettings opcUaSettings, int sequenceNumber, 
+        DateTime datasetBaselineTime, DateTime publishStartTime)
     {
         var deltaFrame = new OpcUaDeltaFrame
         {
@@ -140,12 +168,27 @@ public class OpcUaDeltaFramePublisher : IOpcUaDeltaFramePublisher
         {
             var nodeId = $"ns={opcUaSettings.NamespaceIndex};s={tag.TagName}";
             
+            // Calculate the simulated timestamp relative to when publishing started
+            DateTime sourceTimestamp;
+            if (DateTime.TryParse(dataPoint.Time, out var dataPointTime))
+            {
+                // Calculate the offset from the dataset baseline
+                var offsetFromBaseline = dataPointTime - datasetBaselineTime;
+                // Apply that offset to the actual publish start time
+                sourceTimestamp = publishStartTime.Add(offsetFromBaseline);
+            }
+            else
+            {
+                // Fallback to current time if parsing fails
+                sourceTimestamp = DateTime.UtcNow;
+            }
+            
             var opcUaDataValue = new OpcUaDataValue
             {
                 NodeId = nodeId,
                 DisplayName = tag.TagName,
                 Value = dataPoint.Value,
-                SourceTimestamp = DateTime.TryParse(dataPoint.Time, out var parsedTime) ? parsedTime : DateTime.UtcNow,
+                SourceTimestamp = sourceTimestamp, // Now calculated relative to publish start time!
                 ServerTimestamp = DateTime.UtcNow,
                 StatusCode = 0, // Good
                 DataType = tag.DataType
@@ -167,6 +210,15 @@ public class OpcUaDeltaFramePublisher : IOpcUaDeltaFramePublisher
         }
 
         return deltaFrame;
+    }
+
+    // Interface compatibility method - maintains original signature
+    public OpcUaDeltaFrame CreateDeltaFrame(DatasetTag tag, List<TimeSeriesDataPoint> dataPoints, OpcUaSettings opcUaSettings, int sequenceNumber)
+    {
+        // For backward compatibility with the interface - use current time as baseline
+        var datasetBaselineTime = DateTime.UtcNow;
+        var publishStartTime = DateTime.UtcNow;
+        return CreateDeltaFrame(tag, dataPoints, opcUaSettings, sequenceNumber, datasetBaselineTime, publishStartTime);
     }
 
     public Task<bool> ValidateOpcUaConfigurationAsync(OpcUaSettings opcUaSettings)

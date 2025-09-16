@@ -43,8 +43,9 @@ public class EventHubPublisher : IEventHubPublisher
             // Create the Event Hub producer client
             producer = CreateEventHubProducer(publishRecord.EventHubConfig);
 
-            // Update status to in progress
+            // Update status to in progress and set publish start time for timestamp calculations
             publishRecord.Status = PublishingStatus.InProgress;
+            publishRecord.PublishedAt = DateTime.UtcNow; // Set this early so we can use it as the anchor time
             publishRecord.PublishedDataPoints = 0;
 
             // Calculate total data points across all tags
@@ -80,9 +81,8 @@ public class EventHubPublisher : IEventHubPublisher
                     batchIndex + 1, totalBatches, publishRecord.DatasetName);
             }
 
-            // Mark as completed
+            // Mark as completed  
             publishRecord.Status = PublishingStatus.Completed;
-            publishRecord.PublishedAt = DateTime.UtcNow;
             publishRecord.ErrorMessage = null;
 
             _logger.LogInformation("Successfully published dataset {DatasetName} with {DataPointCount} data points", 
@@ -151,9 +151,15 @@ public class EventHubPublisher : IEventHubPublisher
     {
         using var eventBatch = await producer.CreateBatchAsync(cancellationToken);
 
+        // Calculate the baseline timestamp from the earliest data point in the entire dataset
+        var datasetBaselineTime = GetDatasetBaselineTimestamp(publishRecord);
+        
+        // Use PublishedAt as the actual start time for the simulation
+        var publishStartTime = publishRecord.PublishedAt ?? DateTime.UtcNow;
+
         foreach (var (tagName, dataPoint) in taggedDataPoints)
         {
-            var eventData = CreateEventData(tagName, dataPoint, publishRecord);
+            var eventData = CreateEventData(tagName, dataPoint, publishRecord, datasetBaselineTime, publishStartTime);
             
             if (!eventBatch.TryAdd(eventData))
             {
@@ -184,8 +190,45 @@ public class EventHubPublisher : IEventHubPublisher
         }
     }
 
-    private EventData CreateEventData(string tagName, Models.TimeSeriesDataPoint dataPoint, PublishRecord publishRecord)
+    private DateTime GetDatasetBaselineTimestamp(PublishRecord publishRecord)
     {
+        DateTime? earliestTime = null;
+        
+        foreach (var tag in publishRecord.Tags)
+        {
+            foreach (var dataPoint in tag.TimeSeriesData)
+            {
+                if (DateTime.TryParse(dataPoint.Time, out var parsedTime))
+                {
+                    if (earliestTime == null || parsedTime < earliestTime)
+                    {
+                        earliestTime = parsedTime;
+                    }
+                }
+            }
+        }
+        
+        return earliestTime ?? DateTime.UtcNow;
+    }
+
+    private EventData CreateEventData(string tagName, Models.TimeSeriesDataPoint dataPoint, PublishRecord publishRecord, 
+        DateTime datasetBaselineTime, DateTime publishStartTime)
+    {
+        // Calculate the simulated timestamp relative to when publishing started
+        DateTime sourceTimestamp;
+        if (DateTime.TryParse(dataPoint.Time, out var dataPointTime))
+        {
+            // Calculate the offset from the dataset baseline
+            var offsetFromBaseline = dataPointTime - datasetBaselineTime;
+            // Apply that offset to the actual publish start time
+            sourceTimestamp = publishStartTime.Add(offsetFromBaseline);
+        }
+        else
+        {
+            // Fallback to current time if parsing fails
+            sourceTimestamp = DateTime.UtcNow;
+        }
+        
         var eventPayload = new
         {
             DatasetId = publishRecord.Id,
@@ -194,7 +237,8 @@ public class EventHubPublisher : IEventHubPublisher
             TagName = tagName,
             Time = dataPoint.Time,
             Value = dataPoint.Value,
-            PublishedAt = DateTime.UtcNow,
+            SourceTimestamp = sourceTimestamp, // This is the key field you mentioned!
+            PublishedAt = DateTime.UtcNow, // Keep the actual publish time for reference
             Metadata = publishRecord.Metadata
         };
 
