@@ -12,7 +12,7 @@ interface PublishDatasetModalProps {
   isOpen: boolean;
   onClose: () => void;
   tags: TagProgress[];
-  dataLength: number;
+  timeHorizon: import('../types/timeHorizon').TimeHorizonOption;
   onPublishSuccess: (publishId: string) => void;
 }
 
@@ -20,7 +20,7 @@ export const PublishDatasetModal: React.FC<PublishDatasetModalProps> = ({
   isOpen,
   onClose,
   tags,
-  dataLength,
+  timeHorizon,
   onPublishSuccess
 }) => {
   const [datasetName, setDatasetName] = useState('');

@@ -15,8 +15,8 @@ export const TimeCraftApp: React.FC = () => {
   const {
     description,
     setDescription,
-    dataLength,
-    setDataLength,
+    timeHorizon,
+    setTimeHorizon,
     isLoading,
     tags,
     tagProgress,
@@ -64,8 +64,8 @@ export const TimeCraftApp: React.FC = () => {
             <InputForm
               description={description}
               setDescription={setDescription}
-              dataLength={dataLength}
-              setDataLength={setDataLength}
+              timeHorizon={timeHorizon}
+              setTimeHorizon={setTimeHorizon}
               isLoading={isLoading}
               onGenerate={generateTimeSeries}
               onClearAll={clearAll}
@@ -77,7 +77,7 @@ export const TimeCraftApp: React.FC = () => {
             <TagsDisplay 
               tags={tags} 
               tagProgress={tagProgress} 
-              dataLength={dataLength}
+              timeHorizon={timeHorizon}
               onRetryTag={retryTag}
               onUpdateTagData={updateTagTimeSeriesData}
             />
