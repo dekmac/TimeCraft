@@ -6,6 +6,7 @@ public interface IPublishingService
 {
     Task<string> CreatePublishRecordAsync(PublishRecord publishRecord);
     Task<PublishedDataset?> GetPublishedDatasetAsync(string id);
+    Task<DatasetContent?> GetDatasetContentAsync(string id);
     Task<List<PublishedDataset>> GetAllPublishedDatasetsAsync();
     Task UpdatePublishRecordAsync(PublishRecord publishRecord);
     Task<PublishRecord?> GetPublishRecordAsync(string id);

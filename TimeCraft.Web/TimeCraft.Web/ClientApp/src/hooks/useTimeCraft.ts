@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { TimeSeriesData, GeneratedTag, TagProgress, TagProgressStatus } from '../types/api';
 import { timeCraftApi } from '../services/timeCraftApi';
 import { TIME_HORIZON_OPTIONS, type TimeHorizonOption } from '../types/timeHorizon';
@@ -11,6 +11,7 @@ export const useTimeCraft = () => {
   const [tagProgress, setTagProgress] = useState<TagProgress[]>([]);
   const [timeSeriesData, setTimeSeriesData] = useState<TimeSeriesData[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loadingDataset, setLoadingDataset] = useState(false);
 
     const updateTagProgress = (index: number, updates: Partial<TagProgress>) => {
     setTagProgress(prev => prev.map((tag, i) => 
@@ -72,6 +73,7 @@ export const useTimeCraft = () => {
   };
 
   const clearAll = () => {
+    setDescription('');
     setTags([]);
     setTagProgress([]);
     setTimeSeriesData([]);
@@ -369,12 +371,95 @@ export const useTimeCraft = () => {
     }
   };
 
+  const loadDataset = useCallback(async (datasetId: string) => {
+    try {
+      setLoadingDataset(true);
+      setError(null);
+      
+      console.log('🚀 Loading dataset content with ID:', datasetId);
+      
+      // Fetch the dataset content including tags and time series data
+      const dataset = await timeCraftApi.getDatasetContent(datasetId);
+      
+      console.log('📊 Full dataset content received:', dataset);
+      
+      if (!dataset) {
+        throw new Error('Dataset not found');
+      }
+
+      // Set the description
+      if (dataset.description) {
+        setDescription(dataset.description);
+      }
+
+      // Load the tags and their time series data
+      if (dataset.tags && dataset.tags.length > 0) {
+        // Create GeneratedTag array for the tags state
+        const generatedTags: GeneratedTag[] = dataset.tags.map(tag => ({
+          tag: tag.tagName,
+          description: tag.description
+        }));
+
+        // Create TagProgress array with the loaded time series data
+        const loadedTags: TagProgress[] = dataset.tags.map(tag => ({
+          tag: tag.tagName,
+          description: tag.description,
+          status: 'complete' as TagProgressStatus,
+          timeSeriesData: {
+            name: tag.tagName,
+            data: tag.timeSeriesData?.map(point => point.value) || [],
+            timestamps: tag.timeSeriesData?.map(point => point.time || '') || []
+          }
+        }));
+
+        // Set both tags and tagProgress to ensure UI renders correctly
+        setTags(generatedTags);
+        setTagProgress(loadedTags);
+        
+        // Also set the global time series data
+        const timeSeriesData = loadedTags
+          .filter(tag => tag.timeSeriesData)
+          .map(tag => tag.timeSeriesData!);
+        setTimeSeriesData(timeSeriesData);
+
+        console.log('✅ Dataset content loaded successfully:', {
+          datasetName: dataset.datasetName,
+          description: dataset.description,
+          status: dataset.status,
+          publishedAt: dataset.publishedAt,
+          totalTags: dataset.totalTags,
+          totalDataPoints: dataset.totalDataPoints,
+          loadedTags: loadedTags.length,
+          loadedTimeSeriesData: timeSeriesData.length
+        });
+      } else {
+        console.log('⚠️ Dataset loaded but no tags found:', dataset);
+      }
+      
+    } catch (err: unknown) {
+      console.error('Error loading dataset:', err);
+      let errorMessage = 'Failed to load dataset';
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'object' && err !== null && 'response' in err) {
+        const response = (err as { response?: { data?: { message?: string } } }).response;
+        errorMessage = response?.data?.message || errorMessage;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoadingDataset(false);
+    }
+  }, []);
+
   return {
     description,
     setDescription,
     timeHorizon,
     setTimeHorizon,
     isLoading,
+    loadingDataset,
     tags,
     tagProgress,
     timeSeriesData,
@@ -382,6 +467,7 @@ export const useTimeCraft = () => {
     generateTimeSeries,
     clearAll,
     retryTag,
-    updateTagTimeSeriesData
+    updateTagTimeSeriesData,
+    loadDataset
   };
 };

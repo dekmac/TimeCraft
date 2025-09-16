@@ -131,6 +131,34 @@ public class PublishingController : ControllerBase
         }
     }
 
+    [HttpGet("datasets/{id}/content")]
+    public async Task<ActionResult<DatasetContent>> GetDatasetContent(string id)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return BadRequest("Dataset ID is required");
+            }
+
+            _logger.LogInformation("Getting dataset content {Id}", id);
+            
+            var content = await _publishingService.GetDatasetContentAsync(id);
+            
+            if (content == null)
+            {
+                return NotFound($"Dataset with ID {id} not found");
+            }
+
+            return Ok(content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting dataset content {Id}", id);
+            return StatusCode(500, "An error occurred while retrieving the dataset content");
+        }
+    }
+
     [HttpGet("datasets/{id}/status")]
     public async Task<ActionResult<object>> GetPublishingStatus(string id)
     {

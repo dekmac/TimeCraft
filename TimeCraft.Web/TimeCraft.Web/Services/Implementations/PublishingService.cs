@@ -77,6 +77,21 @@ public class PublishingService : IPublishingService
         }
     }
 
+    public async Task<DatasetContent?> GetDatasetContentAsync(string id)
+    {
+        try
+        {
+            var publishRecord = await GetPublishRecordAsync(id);
+            
+            return publishRecord != null ? MapToDatasetContent(publishRecord) : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting dataset content {Id}", id);
+            return null;
+        }
+    }
+
     public async Task<List<PublishedDataset>> GetAllPublishedDatasetsAsync()
     {
         try
@@ -315,6 +330,24 @@ public class PublishingService : IPublishingService
             PublishedTags = record.Status == PublishingStatus.Completed ? record.Tags.Count : 0, // For now, tags are either all published or none
             ErrorMessage = record.ErrorMessage,
             RetryCount = record.RetryCount
+        };
+    }
+
+    private static DatasetContent MapToDatasetContent(PublishRecord record)
+    {
+        return new DatasetContent
+        {
+            Id = record.Id,
+            DatasetName = record.DatasetName,
+            Description = record.Description,
+            OriginalPrompt = record.OriginalPrompt,
+            ScenarioParameters = record.ScenarioParameters,
+            Tags = record.Tags,
+            Status = record.Status,
+            CreatedAt = record.CreatedAt,
+            PublishedAt = record.PublishedAt,
+            TotalTags = record.Tags.Count,
+            TotalDataPoints = record.TotalDataPoints
         };
     }
 

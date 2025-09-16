@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { timeCraftApi } from '../services/timeCraftApi';
-import type { PublishedDataset, PublishingMode, StreamConfiguration } from '../types/api';
+import type { PublishedDataset, PublishingMode } from '../types/api';
 
 export const PublishedDatasets: React.FC = () => {
+  const navigate = useNavigate();
   const [datasets, setDatasets] = useState<PublishedDataset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -229,6 +231,10 @@ export const PublishedDatasets: React.FC = () => {
       }
       return newSet;
     });
+  };
+
+  const handleEditDataset = (datasetId: string) => {
+    navigate(`/generate?datasetId=${datasetId}`);
   };
 
   useEffect(() => {
@@ -666,6 +672,14 @@ export const PublishedDatasets: React.FC = () => {
 
               {/* Action buttons */}
               <div className="mt-4 flex flex-wrap justify-end gap-2">
+                {/* Edit button - to navigate to generate view with dataset */}
+                <button
+                  onClick={() => handleEditDataset(dataset.id)}
+                  className="px-3 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors flex items-center"
+                >
+                  ✏️ Edit Dataset
+                </button>
+
                 {/* Download CSV button - available for all datasets */}
                 <button
                   onClick={() => handleDownloadCsv(dataset.id, dataset.datasetName)}

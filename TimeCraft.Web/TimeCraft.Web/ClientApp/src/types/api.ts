@@ -196,6 +196,20 @@ export interface PublishedDataset {
     streamConfig?: StreamConfiguration;
 }
 
+export interface DatasetContent {
+    id: string;
+    datasetName: string;
+    description: string;
+    originalPrompt?: string;
+    scenarioParameters?: string;
+    tags: DatasetTag[];
+    status: PublishingStatus;
+    createdAt: string;
+    publishedAt?: string;
+    totalTags: number;
+    totalDataPoints: number;
+}
+
 export interface PublishingStatusInfo {
     id: string;
     status: string;

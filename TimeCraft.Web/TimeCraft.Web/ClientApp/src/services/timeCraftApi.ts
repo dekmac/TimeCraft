@@ -10,6 +10,7 @@ import type {
   PublishTimeSeriesResponse,
   PublishDatasetRequest,
   PublishedDataset,
+  DatasetContent,
   PublishingStatusInfo,
   UpdateModeRequest,
   PublishingMode
@@ -97,7 +98,24 @@ class TimeCraftApiService {
   }
 
   async getPublishedDataset(id: string): Promise<PublishedDataset> {
+    console.log('🔍 Fetching dataset with ID:', id);
     const response = await this.api.get<PublishedDataset>(`/publishing/datasets/${id}`);
+    console.log('📦 Dataset response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data
+    });
+    return response.data;
+  }
+
+  async getDatasetContent(id: string): Promise<DatasetContent> {
+    console.log('🔍 Fetching dataset content with ID:', id);
+    const response = await this.api.get<DatasetContent>(`/publishing/datasets/${id}/content`);
+    console.log('📦 Dataset content response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data
+    });
     return response.data;
   }
 
