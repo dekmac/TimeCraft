@@ -3445,19 +3445,23 @@
     "customProperties": {}
   },
   "streamConfig": {
-    "mode": 0,
+    "mode": "RealTimeStream",
     "streamIntervalMs": 1000,
     "streamSpeed": 1,
     "loopCycles": 0,
     "loopPauseMs": 5000,
-    "isActive": true,
+    "isActive": false,
     "currentCycle": 0,
     "streamStartTime": "2025-09-15T20:34:06.7120701Z",
-    "reIngestionCount": 1
+    "reIngestionCount": 1,
+    "currentStreamPosition": 168,
+    "streamPointsSent": 840,
+    "pausedAt": "2025-09-15T22:00:17.3687782Z",
+    "totalStreamTime": "00:00:00"
   },
   "status": 2,
   "createdAt": "2025-09-15T18:31:24.1238229Z",
-  "publishedAt": "2025-09-15T20:35:25.5220572Z",
+  "publishedAt": "2025-09-15T21:45:29.0864061Z",
   "errorMessage": null,
   "retryCount": 0,
   "totalDataPoints": 840,
