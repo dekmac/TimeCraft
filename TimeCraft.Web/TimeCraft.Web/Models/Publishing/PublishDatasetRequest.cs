@@ -9,6 +9,8 @@ public class PublishDatasetRequest
     
     public string Description { get; set; } = string.Empty;
     
+    public string? OriginalPrompt { get; set; }
+    
     [Required(ErrorMessage = "Tags are required")]
     public List<DatasetTag> Tags { get; set; } = new();
     

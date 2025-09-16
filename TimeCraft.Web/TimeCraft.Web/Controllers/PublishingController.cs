@@ -56,6 +56,7 @@ public class PublishingController : ControllerBase
             {
                 DatasetName = request.DatasetName,
                 Description = request.Description,
+                OriginalPrompt = request.OriginalPrompt,
                 Tags = request.Tags,
                 EventHubConfig = request.EventHubConfig,
                 OpcUaSettings = request.OpcUaSettings,

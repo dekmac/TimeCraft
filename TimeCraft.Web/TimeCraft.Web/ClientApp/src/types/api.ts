@@ -145,6 +145,7 @@ export interface TimeSeriesDataPoint {
 export interface PublishDatasetRequest {
     datasetName: string;
     description: string;
+    originalPrompt?: string;
     tags: DatasetTag[];
     eventHubConfig: EventHubConfig;
     opcUaSettings: OpcUaSettings;

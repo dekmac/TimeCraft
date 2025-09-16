@@ -401,7 +401,14 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, tim
       <PublishModal isOpen={publishModalOpen} onClose={handleCloseModal} onPublish={handlePublish} timeSeriesData={selectedTagForPublish?.data || null} isLoading={publishLoading} />
 
       {/* Dataset Publish Modal */}
-      <PublishDatasetModal isOpen={datasetModalOpen} onClose={handleCloseDatasetModal} tags={tagProgress || []} timeHorizon={timeHorizon} onPublishSuccess={handleDatasetPublishSuccess} />
+      <PublishDatasetModal 
+        isOpen={datasetModalOpen} 
+        onClose={handleCloseDatasetModal} 
+        tags={tagProgress || []} 
+        timeHorizon={timeHorizon} 
+        originalScenario={originalScenario}
+        onPublishSuccess={handleDatasetPublishSuccess} 
+      />
     </div>
   );
 };

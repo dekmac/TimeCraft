@@ -13,6 +13,7 @@ interface PublishDatasetModalProps {
   onClose: () => void;
   tags: TagProgress[];
   timeHorizon: import('../types/timeHorizon').TimeHorizonOption;
+  originalScenario?: string;
   onPublishSuccess: (publishId: string) => void;
 }
 
@@ -21,6 +22,7 @@ export const PublishDatasetModal: React.FC<PublishDatasetModalProps> = ({
   onClose,
   tags,
   timeHorizon,
+  originalScenario,
   onPublishSuccess
 }) => {
   const [datasetName, setDatasetName] = useState('');
@@ -34,6 +36,21 @@ export const PublishDatasetModal: React.FC<PublishDatasetModalProps> = ({
   const [publishingInterval, setPublishingInterval] = useState(1000);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-populate description with original scenario when modal opens
+  React.useEffect(() => {
+    if (isOpen && originalScenario) {
+      setDescription(originalScenario);
+    } else if (!isOpen) {
+      // Clear form when modal closes
+      setDatasetName('');
+      setDescription('');
+      setEventHubName('');
+      setNamespaceName('');
+      setConnectionString('');
+      setError(null);
+    }
+  }, [isOpen, originalScenario]);
 
   if (!isOpen) return null;
 
@@ -102,6 +119,7 @@ export const PublishDatasetModal: React.FC<PublishDatasetModalProps> = ({
       const publishRequest: PublishDatasetRequest = {
         datasetName: datasetName.trim(),
         description: description.trim(),
+        originalPrompt: originalScenario,
         tags: datasetTags,
         eventHubConfig: eventHubConfig,
         opcUaSettings: opcUaSettings,
@@ -185,7 +203,7 @@ export const PublishDatasetModal: React.FC<PublishDatasetModalProps> = ({
                 Description
               </label>
               <textarea
-                value={description}
+                value={description ?? originalScenario}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 rows={3}
