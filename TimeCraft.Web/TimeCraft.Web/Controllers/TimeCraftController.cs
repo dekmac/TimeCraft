@@ -133,6 +133,44 @@ public class TimeCraftController : ControllerBase
         }
     }
 
+    [HttpPost("regenerate-timeseries")]
+    public async Task<ActionResult<GenerateTimeSeriesResponse>> RegenerateTimeSeries([FromBody] RegenerateTimeSeriesRequest request)
+    {
+        _logger.LogInformation("=== RegenerateTimeSeries method called ===");
+        
+        try
+        {
+            if (request == null)
+            {
+                _logger.LogWarning("Request object is null");
+                return BadRequest("Request is required");
+            }
+            
+            if (string.IsNullOrWhiteSpace(request.Tag))
+            {
+                _logger.LogWarning("Request.Tag is null or empty");
+                return BadRequest("Tag is required");
+            }
+            
+            if (string.IsNullOrWhiteSpace(request.Scenario))
+            {
+                _logger.LogWarning("Request.Scenario is null or empty");
+                return BadRequest("Scenario is required");
+            }
+
+            _logger.LogInformation("Calling Python API service for time series regeneration...");
+            var result = await _pythonApiService.RegenerateTimeSeriesAsync(request);
+            _logger.LogInformation("Python API service completed for time series regeneration");
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error regenerating time series for tag: {Tag}", request?.Tag);
+            return StatusCode(500, "An error occurred while regenerating time series data");
+        }
+    }
+
     [HttpPost("generate-anomaly")]
     public async Task<ActionResult<GenerateAnomalyResponse>> GenerateAnomaly([FromBody] GenerateAnomalyRequest request)
     {

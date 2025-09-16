@@ -4,6 +4,7 @@ import type {
   GenerateTagsResponse, 
   GenerateTimeSeriesRequest, 
   GenerateTimeSeriesResponse,
+  RegenerateTimeSeriesRequest,
   GenerateAnomalyRequest,
   GenerateAnomalyResponse,
   PublishTimeSeriesRequest,
@@ -77,6 +78,12 @@ class TimeCraftApiService {
   async generateAnomaly(request: GenerateAnomalyRequest): Promise<GenerateAnomalyResponse> {
     console.log('Generating anomaly with request:', request);
     const response = await this.api.post<GenerateAnomalyResponse>('/timecraft/generate-anomaly', request);
+    return response.data;
+  }
+
+  async regenerateTimeSeries(request: RegenerateTimeSeriesRequest): Promise<GenerateTimeSeriesResponse> {
+    console.log('Regenerating time series with request:', request);
+    const response = await this.api.post<GenerateTimeSeriesResponse>('/timecraft/regenerate-timeseries', request);
     return response.data;
   }
 

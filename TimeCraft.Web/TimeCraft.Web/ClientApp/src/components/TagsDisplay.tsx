@@ -3,6 +3,7 @@ import { MiniTimeSeriesChart } from './MiniTimeSeriesChart';
 import { AnomalyControls } from './AnomalyControls';
 import { PublishModal } from './PublishModal';
 import { PublishDatasetModal } from './PublishDatasetModal';
+import { RegenerateSplitButton } from './RegenerateSplitButton';
 import { useAnomaly } from '../hooks/useAnomaly';
 import { timeCraftApi } from '../services/timeCraftApi';
 import type { GeneratedTag, TagProgress, TagProgressStatus, TimeSeriesData, EventHubConfig, TimeSeriesDataPoint } from '../types/api';
@@ -12,6 +13,7 @@ interface TagsDisplayProps {
   tags: GeneratedTag[];
   tagProgress?: TagProgress[];
   timeHorizon: TimeHorizonOption;
+  originalScenario?: string;
   onRetryTag?: (tagIndex: number) => void;
   onUpdateTagData?: (tagIndex: number, newData: number[], newTimestamps?: string[]) => void;
 }
@@ -73,7 +75,7 @@ const getStatusColor = (status: TagProgressStatus) => {
   }
 };
 
-export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, timeHorizon, onRetryTag, onUpdateTagData }) => {
+export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, timeHorizon, originalScenario, onRetryTag, onUpdateTagData }) => {
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [datasetModalOpen, setDatasetModalOpen] = useState(false);
   const [selectedTagForPublish, setSelectedTagForPublish] = useState<{index: number; tag: GeneratedTag; data: TimeSeriesData} | null>(null);
@@ -82,6 +84,8 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, tim
   const [datasetPublishError, setDatasetPublishError] = useState<string | null>(null);
   const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
   const [datasetPublishSuccess, setDatasetPublishSuccess] = useState<string | null>(null);
+  const [regeneratingTags, setRegeneratingTags] = useState<Set<number>>(new Set());
+  const [regenerationError, setRegenerationError] = useState<string | null>(null);
 
   const {
     isGeneratingAnomaly,
@@ -197,6 +201,56 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, tim
     }
   };
 
+  const handleRegenerateTimeSeries = async (tagIndex: number, instructions?: string) => {
+    const tag = tags[tagIndex];
+    const progress = tagProgress?.[tagIndex];
+    
+    if (!tag || !progress) return;
+
+    setRegeneratingTags(prev => new Set(prev).add(tagIndex));
+    setRegenerationError(null);
+
+    try {
+      const response = await timeCraftApi.regenerateTimeSeries({
+        tag: tag.tag,
+        scenario: originalScenario || 'Industrial IoT sensor data',
+        instructions,
+        sequenceLength: progress.timeSeriesData?.data.length || 100,
+        tagIndex,
+        timeHorizon: {
+          period: timeHorizon.config.period,
+          unit: timeHorizon.config.unit,
+          granularity: timeHorizon.config.granularity,
+          totalPoints: timeHorizon.totalPoints
+        }
+      });
+
+      if (response.success && response.timeSeries && onUpdateTagData) {
+        onUpdateTagData(tagIndex, response.timeSeries, response.timestamps);
+        console.log('Time series regenerated successfully:', response);
+      } else {
+        setRegenerationError(response.message || 'Failed to regenerate time series');
+      }
+    } catch (error) {
+      console.error('Error regenerating time series:', error);
+      setRegenerationError(error instanceof Error ? error.message : 'Failed to regenerate time series');
+    } finally {
+      setRegeneratingTags(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tagIndex);
+        return newSet;
+      });
+    }
+  };
+
+  const handleSimpleRegenerate = (tagIndex: number) => {
+    handleRegenerateTimeSeries(tagIndex);
+  };
+
+  const handleRegenerateWithInstructions = (tagIndex: number) => (instructions: string) => {
+    handleRegenerateTimeSeries(tagIndex, instructions);
+  };
+
   return (
     <div className="glass-effect p-6 mb-6">
       <div className="flex items-center justify-between mb-4">
@@ -300,6 +354,18 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, tim
                 </div>
               )}
 
+              {/* Regenerate Button - only show for completed tags */}
+              {status === 'complete' && progress?.timeSeriesData && (
+                <div className="mb-3">
+                  <RegenerateSplitButton
+                    onRegenerateSimple={() => handleSimpleRegenerate(index)}
+                    onRegenerateWithInstructions={handleRegenerateWithInstructions(index)}
+                    disabled={false}
+                    loading={regeneratingTags.has(index)}
+                  />
+                </div>
+              )}
+
               {/* Publish Button - only show for completed tags */}
               {status === 'complete' && progress?.timeSeriesData && (
                 <div className="mb-3">
@@ -359,6 +425,21 @@ export const TagsDisplay: React.FC<TagsDisplayProps> = ({ tags, tagProgress, tim
                     <span>{anomalyError}</span>
                     <button
                       onClick={() => setAnomalyError(null)}
+                      className="text-red-400 hover:text-red-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Regeneration Error Display */}
+              {regenerationError && (
+                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                  <div className="flex items-center justify-between">
+                    <span>{regenerationError}</span>
+                    <button
+                      onClick={() => setRegenerationError(null)}
                       className="text-red-400 hover:text-red-600"
                     >
                       ✕

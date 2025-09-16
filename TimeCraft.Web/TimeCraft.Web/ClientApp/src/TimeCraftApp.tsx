@@ -136,6 +136,7 @@ export const TimeCraftApp: React.FC<TimeCraftAppProps> = ({ defaultView = 'main'
               tags={tags} 
               tagProgress={tagProgress} 
               timeHorizon={timeHorizon}
+              originalScenario={description}
               onRetryTag={retryTag}
               onUpdateTagData={updateTagTimeSeriesData}
             />

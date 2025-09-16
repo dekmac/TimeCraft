@@ -503,4 +503,173 @@ public class PythonApiService : IPythonApiService
             };
         }
     }
+
+    public async Task<GenerateTimeSeriesResponse> RegenerateTimeSeriesAsync(RegenerateTimeSeriesRequest request)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "Regenerating time series for tag: {Tag} with additional instructions: {Instructions}",
+                request.Tag,
+                request.Instructions ?? "None"
+            );
+
+            // Create enhanced scenario with instructions if provided
+            var enhancedScenario = request.Scenario;
+            if (!string.IsNullOrWhiteSpace(request.Instructions))
+            {
+                enhancedScenario = $"{request.Scenario}\n\nAdditional Instructions: {request.Instructions}";
+            }
+
+            var json = JsonSerializer.Serialize(
+                new
+                {
+                    tag_name = request.Tag,
+                    text_description = enhancedScenario,
+                    sequence_length = request.SequenceLength,
+                    tag_index = request.TagIndex,
+                    model_name = "gpt-4o",
+                    temperature = 0.0,
+                    regeneration_request = true, // Flag to indicate this is a regeneration
+                    original_instructions = request.Instructions,
+                    time_horizon = request.TimeHorizon != null ? new
+                    {
+                        period = request.TimeHorizon.Period,
+                        unit = request.TimeHorizon.Unit,
+                        granularity = request.TimeHorizon.Granularity,
+                        total_points = request.TimeHorizon.TotalPoints,
+                        batch_size = request.TimeHorizon.BatchSize,
+                        batch_index = request.TimeHorizon.BatchIndex
+                    } : null
+                }
+            );
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _logger.LogInformation("Sending regeneration request to Python API: {Json}", json);
+
+            var response = await _httpClient.PostAsync(
+                $"{_pythonApiBaseUrl}/generate-timeseries-for-tag",
+                content
+            );
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogError(
+                    "Python API returned error {StatusCode} for regeneration: {ErrorContent}",
+                    response.StatusCode,
+                    errorContent
+                );
+                throw new HttpRequestException(
+                    $"Python API error {response.StatusCode}: {errorContent}"
+                );
+            }
+
+            response.EnsureSuccessStatusCode();
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("Python API regeneration response: {Response}", responseJson);
+            var result = JsonSerializer.Deserialize<JsonElement>(responseJson);
+
+            // Parse the Python API response structure
+            var success =
+                result.TryGetProperty("status", out var statusElement)
+                && statusElement.GetString() == "success";
+
+            var message = result.TryGetProperty("message", out var messageElement)
+                ? messageElement.GetString() ?? "Time series regenerated"
+                : "Time series regenerated";
+
+            var tagName = result.TryGetProperty("tag_name", out var tagNameElement)
+                ? tagNameElement.GetString()
+                : request.Tag;
+
+            var timeSeries = new List<double>();
+            if (result.TryGetProperty("timeseries", out var timeseriesElement) &&
+                timeseriesElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in timeseriesElement.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Number && item.TryGetDouble(out var value))
+                    {
+                        timeSeries.Add(value);
+                    }
+                }
+            }
+
+            var timestamps = new List<string>();
+            if (result.TryGetProperty("timestamps", out var timestampsElement) &&
+                timestampsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in timestampsElement.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String)
+                    {
+                        var timestamp = item.GetString();
+                        if (!string.IsNullOrEmpty(timestamp))
+                        {
+                            timestamps.Add(timestamp);
+                        }
+                    }
+                }
+            }
+
+            return new GenerateTimeSeriesResponse
+            {
+                Success = success,
+                Message = message,
+                TagName = tagName,
+                TimeSeries = timeSeries,
+                Timestamps = timestamps
+            };
+        }
+        catch (TaskCanceledException ex) when (ex.CancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Python API call for regenerate-timeseries was cancelled");
+            return new GenerateTimeSeriesResponse
+            {
+                Success = false,
+                Message = "Request was cancelled",
+                TagName = request.Tag,
+                TimeSeries = new List<double>(),
+                Timestamps = new List<string>()
+            };
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning("Python API call for regenerate-timeseries timed out");
+            return new GenerateTimeSeriesResponse
+            {
+                Success = false,
+                Message = "Request timed out - please try again.",
+                TagName = request.Tag,
+                TimeSeries = new List<double>(),
+                Timestamps = new List<string>()
+            };
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error calling Python API for regenerate-timeseries");
+            return new GenerateTimeSeriesResponse
+            {
+                Success = false,
+                Message = $"Connection error: {ex.Message}",
+                TagName = request.Tag,
+                TimeSeries = new List<double>(),
+                Timestamps = new List<string>()
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling Python API for regenerate-timeseries");
+            return new GenerateTimeSeriesResponse
+            {
+                Success = false,
+                Message = ex.Message,
+                TagName = request.Tag,
+                TimeSeries = new List<double>(),
+                Timestamps = new List<string>()
+            };
+        }
+    }
 }

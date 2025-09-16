@@ -48,6 +48,22 @@ export interface GenerateTimeSeriesRequest {
     };
 }
 
+export interface RegenerateTimeSeriesRequest {
+    tag: string;
+    scenario: string;
+    instructions?: string;
+    sequenceLength?: number;
+    tagIndex?: number;
+    timeHorizon?: {
+        period: number;
+        unit: 'minutes' | 'hours' | 'days' | 'weeks';
+        granularity: 'minute' | 'hour' | 'day';
+        totalPoints: number;
+        batchSize?: number;
+        batchIndex?: number;
+    };
+}
+
 export interface GenerateTimeSeriesResponse {
     success: boolean;
     tagName: string;

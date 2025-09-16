@@ -8,4 +8,5 @@ public interface IPythonApiService
     Task<GenerateTimeSeriesResponse> GenerateTimeSeriesAsync(GenerateTimeSeriesRequest request);
     Task<RefinePromptResponse> RefinePromptAsync(RefinePromptRequest request);
     Task<GenerateAnomalyResponse> GenerateAnomalyAsync(GenerateAnomalyRequest request);
+    Task<GenerateTimeSeriesResponse> RegenerateTimeSeriesAsync(RegenerateTimeSeriesRequest request);
 }
